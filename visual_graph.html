@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exception DAG Visualization</title>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default'
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 0;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 420px;
+            min-width: 320px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px;
+            overflow-y: auto;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 10;
+        }
+
+        .main-graph {
+            margin-left: 420px;
+            width: calc(100vw - 420px);
+            height: 100vh;
+            overflow: auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+
+        .sidebar h2 {
+            font-size: 15px;
+            color: #1d9e75;
+            margin: 0 0 16px 0;
+            font-weight: 700;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 16px 0 8px 0;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid #d0d0d0;
+            font-size: 12px;
+            outline: none;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 9px 16px;
+            border: none;
+            border-radius: 7px;
+            background: #1d9e75;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .btn:hover { background: #178a65; }
+        .btn-sm { padding: 5px 12px; font-size: 11px; margin-top: 8px; margin-right: 0; }
+        .loading { color: #888; font-size: 12px; padding: 8px 0; display: none; }
+
+        .tc-card {
+            background: #fafafa;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .tc-header { font-size: 12px; font-weight: 700; color: #222; margin-bottom: 6px; }
+        .tc-field { font-size: 11px; color: #444; margin-bottom: 4px; line-height: 1.5; }
+        .tc-field strong { color: #222; }
+        .tc-field code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
+        .tc-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 6px; }
+        
+        .badge-normal { background: #e4f7ef; color: #0c6c52; }
+        .badge-exception { background: #fde8e8; color: #c0392b; }
+        .badge-edge { background: #fef6e4; color: #7d5a00; }
+        .badge-min { background: #f3e5f5; color: #6a1b9a; }
+
+        .path-tag { font-size: 10px; background: #f0f0f0; border-radius: 4px; padding: 2px 5px; margin-right: 3px; display: inline-block; }
+        .path-tag-visited { background: #c8f7e4; color: #0a5c42; }
+        .summary-box { background: #f0faf6; border: 1px solid #b2dfdb; border-radius: 7px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; }
+
+        .coverage-sticky-header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .cov-section-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 12px 0 6px 0;
+            border-bottom: 1px dashed #eee;
+            padding-bottom: 3px;
+        }
+
+        .cov-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .cov-card {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .cov-label { font-size: 11px; font-weight: 700; color: #555; margin-bottom: 4px; }
+        .cov-value { font-size: 24px; font-weight: 800; color: #1d9e75; }
+        .cov-desc { font-size: 10px; color: #999; margin-top: 2px; }
+        .cov-overall-bar { display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #ddd; padding-top: 10px; margin-top: 12px; }
+        .cov-overall { font-size: 15px; font-weight: 800; color: #222; }
+        .cov-overall span { color: #1d9e75; font-size: 18px; }
+        .track-result { margin-top: 6px; font-size: 11px; }
+
+        .graph-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+            overflow: auto;
+            width: max-content;
+            min-width: 2600px;
+            min-height: 2200px;
+        }
+
+        .graph-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 16px; }
+        .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
+        .mermaid { width: max-content !important; height: max-content !important; overflow: visible !important; }
+        .mermaid svg { width: 2400px !important; height: 2200px !important; max-width: none !important; }
+    </style>
+</head>
+
+<body>
+
+    <div class="layout">
+        <div class="sidebar">
+            <h2>DAG Analysis Panel</h2>
+            <div class="section-title">Extracted Variables</div>
+            <div class="input-group"><label>executionTier (String)</label><input type="text" placeholder="Enter value" id="executionTier"></div>
+<div class="input-group"><label>payloadSize (int)</label><input type="text" placeholder="Enter value" id="payloadSize"></div>
+<div class="input-group"><label>retryBoundary (int)</label><input type="text" placeholder="Enter value" id="retryBoundary"></div>
+<div class="input-group"><label>processingFlags (int)</label><input type="text" placeholder="Enter value" id="processingFlags"></div>
+<div class="input-group"><label>Target (Covpc)</label><input type="text" placeholder="Enter value" id="Target"></div>
+<div class="input-group"><label>& (Covmc)</label><input type="text" placeholder="Enter value" id="&"></div>
+<div class="input-group"><label>Target (Covet)</label><input type="text" placeholder="Enter value" id="Target"></div>
+<div class="input-group"><label>execution ("System)</label><input type="text" placeholder="Enter value" id="execution"></div>
+<div class="input-group"><label>Target (Covet)</label><input type="text" placeholder="Enter value" id="Target"></div>
+<div class="input-group"><label>processing ("Enterprise)</label><input type="text" placeholder="Enter value" id="processing"></div>
+<div class="input-group"><label>& ((processingFlags)</label><input type="text" placeholder="Enter value" id="&"></div>
+<div class="input-group"><label>& ((processingFlags)</label><input type="text" placeholder="Enter value" id="&"></div>
+<div class="input-group"><label>== (payloadSize)</label><input type="text" placeholder="Enter value" id="=="></div>
+<div class="input-group"><label>configurationKey (String)</label><input type="text" placeholder="Enter value" id="configurationKey"></div>
+<div class="input-group"><label>configurationValue (String)</label><input type="text" placeholder="Enter value" id="configurationValue"></div>
+<div class="input-group"><label>scales (Safely)</label><input type="text" placeholder="Enter value" id="scales"></div>
+<div class="input-group"><label>signature (String)</label><input type="text" placeholder="Enter value" id="signature"></div>
+<div class="input-group"><label>code (int)</label><input type="text" placeholder="Enter value" id="code"></div>
+<div class="input-group"><label>core ("Remote)</label><input type="text" placeholder="Enter value" id="core"></div>
+<div class="input-group"><label>executionTier (String)</label><input type="text" placeholder="Enter value" id="executionTier"></div>
+<div class="input-group"><label>payloadSize (int)</label><input type="text" placeholder="Enter value" id="payloadSize"></div>
+<div class="input-group"><label>retryBoundary (int)</label><input type="text" placeholder="Enter value" id="retryBoundary"></div>
+<div class="input-group"><label>processingFlags (int)</label><input type="text" placeholder="Enter value" id="processingFlags"></div>
+<div class="input-group"><label>key (String)</label><input type="text" placeholder="Enter value" id="key"></div>
+<div class="input-group"><label>value (String)</label><input type="text" placeholder="Enter value" id="value"></div>
+<div class="input-group"><label>count (int)</label><input type="text" placeholder="Enter value" id="count"></div>
+<div class="input-group"><label>data (String)</label><input type="text" placeholder="Enter value" id="data"></div>
+<div class="input-group"><label>array (byte[])</label><input type="text" placeholder="Enter value" id="array"></div>
+<div class="input-group"><label>val (double)</label><input type="text" placeholder="Enter value" id="val"></div>
+<div class="input-group"><label>targetState (String)</label><input type="text" placeholder="Enter value" id="targetState"></div>
+<div class="input-group"><label>input (String)</label><input type="text" placeholder="Enter value" id="input"></div>
+<div class="input-group"><label>limit (int)</label><input type="text" placeholder="Enter value" id="limit"></div>
+<div class="input-group"><label>currentSize (int)</label><input type="text" placeholder="Enter value" id="currentSize"></div>
+<div class="input-group"><label>priority (int)</label><input type="text" placeholder="Enter value" id="priority"></div>
+<div class="input-group"><label>blocks (long)</label><input type="text" placeholder="Enter value" id="blocks"></div>
+<div class="input-group"><label>blockSize (int)</label><input type="text" placeholder="Enter value" id="blockSize"></div>
+<div class="input-group"><label>msg (String)</label><input type="text" placeholder="Enter value" id="msg"></div>
+<div class="input-group"><label>activeThreads (int)</label><input type="text" placeholder="Enter value" id="activeThreads"></div>
+<div class="input-group"><label>maxThreads (int)</label><input type="text" placeholder="Enter value" id="maxThreads"></div>
+<div class="input-group"><label>key (String)</label><input type="text" placeholder="Enter value" id="key"></div>
+<div class="input-group"><label>clusterId (int)</label><input type="text" placeholder="Enter value" id="clusterId"></div>
+<div class="input-group"><label>payload (String)</label><input type="text" placeholder="Enter value" id="payload"></div>
+<div class="input-group"><label>signature (String)</label><input type="text" placeholder="Enter value" id="signature"></div>
+<div class="input-group"><label>checksum (int)</label><input type="text" placeholder="Enter value" id="checksum"></div>
+<div class="input-group"><label>detailed (boolean)</label><input type="text" placeholder="Enter value" id="detailed"></div>
+<div class="input-group"><label>rawInput (String)</label><input type="text" placeholder="Enter value" id="rawInput"></div>
+<div class="input-group"><label>latency (int)</label><input type="text" placeholder="Enter value" id="latency"></div>
+<div class="input-group"><label>failures (int)</label><input type="text" placeholder="Enter value" id="failures"></div>
+<div class="input-group"><label>capacity (int)</label><input type="text" placeholder="Enter value" id="capacity"></div>
+<div class="input-group"><label>size (int)</label><input type="text" placeholder="Enter value" id="size"></div>
+<div class="input-group"><label>pluginName (String)</label><input type="text" placeholder="Enter value" id="pluginName"></div>
+<div class="input-group"><label>taskPriority (int)</label><input type="text" placeholder="Enter value" id="taskPriority"></div>
+<div class="input-group"><label>colName (String)</label><input type="text" placeholder="Enter value" id="colName"></div>
+<div class="input-group"><label>extentSize (int)</label><input type="text" placeholder="Enter value" id="extentSize"></div>
+<div class="input-group"><label>lastAccess (long)</label><input type="text" placeholder="Enter value" id="lastAccess"></div>
+<div class="input-group"><label>timeoutLimit (long)</label><input type="text" placeholder="Enter value" id="timeoutLimit"></div>
+<div class="input-group"><label>seed (String)</label><input type="text" placeholder="Enter value" id="seed"></div>
+<div class="input-group"><label>length (int)</label><input type="text" placeholder="Enter value" id="length"></div>
+
+
+            <hr class="divider">
+            <div class="section-title">Actions</div>
+            <button class="btn" onclick="generateTests()">Generate Test Cases</button>
+            <button class="btn" onclick="getAllPaths()">Get All Possible Test Cases</button>
+
+            <hr class="divider">
+            <div class="section-title">AI Generated Testcases</div>
+            <div id="tc-loading" class="loading">Generating... please wait</div>
+            <div id="tc-display"></div>
+
+            <div id="paths-section" style="display:none">
+                <hr class="divider">
+                <div class="section-title">All Paths & Minimum Test Suite</div>
+                <div id="paths-loading" class="loading">Analysing paths... please wait</div>
+                <div id="paths-display"></div>
+            </div>
+        </div>
+
+        <div class="main-graph">
+            <div class="coverage-sticky-header">
+                <div class="section-title" style="margin-top: 0; margin-bottom: 12px; color: #1d9e75; font-size: 14px;">Live Cumulative Coverage Engine</div>
+                
+                <div class="cov-section-title">Cosdg Call Coverage</div>
+                <div class="cov-grid">
+                    <div class="cov-card">
+                        <div class="cov-label">Method Coverage (Covmd)</div>
+                        <div class="cov-value" id="cov-covmd">0%</div>
+                        <div class="cov-desc">Methods executed / total</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Polymorphic (Covpc)</div>
+                        <div class="cov-value" id="cov-covpc">0%</div>
+                        <div class="cov-desc">Polymorphic edges covered</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Inheritance (Covic)</div>
+                        <div class="cov-value" id="cov-covic">0%</div>
+                        <div class="cov-desc">Inherited methods exercised</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Total Call (Covmc)</div>
+                        <div class="cov-value" id="cov-covmc">0%</div>
+                        <div class="cov-desc">All call edges covered</div>
+                    </div>
+                </div>
+
+                <div class="cov-section-title" style="color: #d97706;">Exception Flow Coverage</div>
+                <div class="cov-grid">
+                    <div class="cov-card">
+                        <div class="cov-label">Throw Coverage (Covet)</div>
+                        <div class="cov-value" id="cov-covet" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Control dependencies hit</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Catch Coverage (Covec)</div>
+                        <div class="cov-value" id="cov-covec" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Catch clauses handled</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Exception Type (Covety)</div>
+                        <div class="cov-value" id="cov-covety" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Unique exception types hit</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Exception Flow (Covef)</div>
+                        <div class="cov-value" id="cov-covef" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Traversed flow paths</div>
+                    </div>
+                </div>
+
+                <div class="cov-overall-bar">
+                    <div style="font-size: 11px; color: #777;" id="active-tc-label">No target trace path actively focused.</div>
+                    <div class="cov-overall">
+                        Cumulative Suite Progress: <span id="cov-overall">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="graph-card">
+                <div class="graph-title">Extended COSDG - Exception Flow DAG</div>
+                <div class="mermaid">
+                    graph TD
+    vs1_01["vs1.01 : VAR_DECL"]
+    vs1_02["vs1.02 : VAR_DECL"]
+    vs1_03["vs1.03 : VAR_DECL"]
+    vs1_04["vs1.04 : IF_EVAL"]
+    vs1_05["vs1.05 : STMT"]
+    vs1_06["vs1.06 : END_IF"]
+    vs1_07["vs1.07 : IF_EVAL"]
+    vs1_08["vs1.08 : STMT"]
+    vs1_09["vs1.09 : IF_EVAL"]
+    vs1_16["vs1.16 : END_IF"]
+    vs1_10["vs1.10 : STMT"]
+    vs1_11["vs1.11 : IF_EVAL"]
+    vs1_17["vs1.17 : IF_EVAL"]
+    vs1_15["vs1.15 : END_IF"]
+    vs1_12["vs1.12 : STMT"]
+    vs1_13["vs1.13 : STMT"]
+    vs1_18["vs1.18 : STMT"]
+    vs1_19["vs1.19 : END_IF"]
+    vs1_14["vs1.14 : END_IF"]
+    vs1_20["vs1.20 : STMT"]
+    vs1_21["vs1.21 : IF_EVAL"]
+    vs1_22["vs1.22 : STMT"]
+    vs1_23["vs1.23 : STMT"]
+    vs1_24["vs1.24 : END_IF"]
+    vs1_25["vs1.25 : IF_EVAL"]
+    vs1_26["vs1.26 : STMT"]
+    vs1_27["vs1.27 : END_IF"]
+    vs1_28["vs1.28 : STMT"]
+    vs1_29["vs1.29 : STMT"]
+    vs1_30["vs1.30 : STMT"]
+    vs1_31["vs1.31 : STMT"]
+    vs1_32["vs1.32 : IF_EVAL"]
+    vs1_33["vs1.33 : STMT"]
+    vs1_34["vs1.34 : END_IF"]
+    vs1_35["vs1.35 : STMT"]
+    vs1_36["vs1.36 : STMT"]
+    vs1_37["vs1.37 : STMT"]
+    vs1_38["vs1.38 : VAR_DECL"]
+    vs1_39["vs1.39 : STMT"]
+    vs1_40["vs1.40 : IF_EVAL"]
+    vs1_41["vs1.41 : STMT"]
+    vs1_42["vs1.42 : END_IF"]
+    vs1_43["vs1.43 : IF_EVAL"]
+    vs1_44["vs1.44 : STMT"]
+    vs1_45["vs1.45 : END_IF"]
+    vs1_46["vs1.46 : VAR_DECL"]
+    vs1_47["vs1.47 : STMT"]
+    vs1_48["vs1.48 : STMT"]
+    vs1_49["vs1.49 : STMT"]
+    vs1_50["vs1.50 : STMT"]
+    vs1_51["vs1.51 : IF_EVAL"]
+    vs1_52["vs1.52 : STMT"]
+    vs1_53["vs1.53 : END_IF"]
+    vs1_54["vs1.54 : STMT"]
+    vs1_55["vs1.55 : IF_EVAL"]
+    vs1_56["vs1.56 : STMT"]
+    vs1_57["vs1.57 : END_IF"]
+    vs1_58["vs1.58 : STMT"]
+    vs1_59["vs1.59 : STMT"]
+    vs1_60["vs1.60 : STMT"]
+    vs1_61["vs1.61 : IF_EVAL"]
+    vs1_62["vs1.62 : STMT"]
+    vs1_63["vs1.63 : END_IF"]
+    vs1_64["vs1.64 : IF_EVAL"]
+    vs1_65["vs1.65 : STMT"]
+    vs1_66["vs1.66 : END_IF"]
+    vs1_67["vs1.67 : STMT"]
+    vs1_68["vs1.68 : IF_EVAL"]
+    vs1_69["vs1.69 : STMT"]
+    vs1_70["vs1.70 : END_IF"]
+    vs1_71["vs1.71 : STMT"]
+    vs1_72["vs1.72 : IF_EVAL"]
+    vs1_73["vs1.73 : STMT"]
+    vs1_74["vs1.74 : END_IF"]
+    vs1_75["vs1.75 : IF_EVAL"]
+    vs1_76["vs1.76 : STMT"]
+    vs1_77["vs1.77 : END_IF"]
+    vs1_78["vs1.78 : STMT"]
+    vs1_79["vs1.79 : IF_EVAL"]
+    vs1_80["vs1.80 : STMT"]
+    vs1_81["vs1.81 : END_IF"]
+    vs1_82["vs1.82 : STMT"]
+    vs1_83["vs1.83 : IF_EVAL"]
+    vs1_84["vs1.84 : STMT"]
+    vs1_85["vs1.85 : END_IF"]
+    vs1_86["vs1.86 : STMT"]
+    vs1_87["vs1.87 : IF_EVAL"]
+    vs1_88["vs1.88 : STMT"]
+    vs1_89["vs1.89 : END_IF"]
+    vs1_90["vs1.90 : STMT"]
+    vs1_91["vs1.91 : IF_EVAL"]
+    vs1_92["vs1.92 : STMT"]
+    vs1_93["vs1.93 : END_IF"]
+    vs1_94["vs1.94 : STMT"]
+    vs1_95["vs1.95 : STMT"]
+    vs1_96["vs1.96 : STMT"]
+    vs1_97["vs1.97 : IF_EVAL"]
+    vs1_98["vs1.98 : STMT"]
+    vs1_99["vs1.99 : STMT"]
+    vs1_100["vs1.100 : END_IF"]
+    vs1_101["vs1.101 : STMT"]
+    vs1_102["vs1.102 : IF_EVAL"]
+    vs1_103["vs1.103 : STMT"]
+    vs1_104["vs1.104 : END_IF"]
+    vs1_105["vs1.105 : STMT"]
+    vs1_106["vs1.106 : IF_EVAL"]
+    vs1_107["vs1.107 : STMT"]
+    vs1_108["vs1.108 : END_IF"]
+    vs1_109["vs1.109 : STMT"]
+    vs1_110["vs1.110 : STMT"]
+    vs1_111["vs1.111 : IF_EVAL"]
+    vs1_112["vs1.112 : STMT"]
+    vs1_113["vs1.113 : END_IF"]
+    vs1_114["vs1.114 : STMT"]
+    vs1_115["vs1.115 : IF_EVAL"]
+    vs1_116["vs1.116 : STMT"]
+    vs1_117["vs1.117 : END_IF"]
+    vs1_118["vs1.118 : STMT"]
+    vs1_119["vs1.119 : STMT"]
+    vs1_120["vs1.120 : STMT"]
+    vs1_121["vs1.121 : IF_EVAL"]
+    vs1_122["vs1.122 : STMT"]
+    vs1_123["vs1.123 : END_IF"]
+    vs1_124["vs1.124 : STMT"]
+    vs1_125["vs1.125 : IF_EVAL"]
+    vs1_126["vs1.126 : STMT"]
+    vs1_127["vs1.127 : END_IF"]
+    vs1_128["vs1.128 : STMT"]
+    vs1_129["vs1.129 : VAR_DECL"]
+    vs1_130["vs1.130 : STMT"]
+    vs1_131["vs1.131 : IF_EVAL"]
+    vs1_132["vs1.132 : STMT"]
+    vs1_133["vs1.133 : END_IF"]
+    vs1_134["vs1.134 : STMT"]
+    vs1_135["vs1.135 : STMT"]
+    vs1_136["vs1.136 : STMT"]
+    vs1_137["vs1.137 : IF_EVAL"]
+    vs1_138["vs1.138 : STMT"]
+    vs1_139["vs1.139 : END_IF"]
+    vs1_140["vs1.140 : STMT"]
+    vs1_141["vs1.141 : IF_EVAL"]
+    vs1_142["vs1.142 : STMT"]
+    vs1_143["vs1.143 : END_IF"]
+    vs1_144["vs1.144 : IF_EVAL"]
+    vs1_145["vs1.145 : STMT"]
+    vs1_146["vs1.146 : END_IF"]
+    vs1_147["vs1.147 : STMT"]
+    vs1_148["vs1.148 : IF_EVAL"]
+    vs1_149["vs1.149 : STMT"]
+    vs1_150["vs1.150 : END_IF"]
+    vs1_151["vs1.151 : STMT"]
+    vs1_152["vs1.152 : IF_EVAL"]
+    vs1_153["vs1.153 : STMT"]
+    vs1_154["vs1.154 : END_IF"]
+    vs1_155["vs1.155 : STMT"]
+    vs1_156["vs1.156 : VAR_DECL"]
+    vs1_157["vs1.157 : STMT"]
+    vs1_158["vs1.158 : VAR_DECL"]
+    vs1_159["vs1.159 : VAR_DECL"]
+    vs1_160["vs1.160 : STMT"]
+    vs1_161["vs1.161 : STMT"]
+    vs1_162["vs1.162 : STMT"]
+    vs1_163["vs1.163 : STMT"]
+    vs1_01 -->|ec.01| vs1_02
+    vs1_02 -->|ec.02| vs1_03
+    vs1_03 -->|ec.03| vs1_04
+    vs1_04 -->|ec.04| vs1_05
+    vs1_04 -->|ec.06| vs1_06
+    vs1_05 -->|ec.05| vs1_06
+    vs1_06 -->|ec.07| vs1_07
+    vs1_07 -->|ec.08| vs1_08
+    vs1_07 -->|ec.09| vs1_09
+    vs1_08 -->|ec.18| vs1_16
+    vs1_09 -->|ec.10| vs1_10
+    vs1_09 -->|ec.11| vs1_11
+    vs1_16 -->|ec.20| vs1_17
+    vs1_10 -->|ec.16| vs1_15
+    vs1_11 -->|ec.12| vs1_12
+    vs1_11 -->|ec.13| vs1_13
+    vs1_17 -->|ec.21| vs1_18
+    vs1_17 -->|ec.23| vs1_19
+    vs1_15 -->|ec.19| vs1_16
+    vs1_12 -->|ec.14| vs1_14
+    vs1_13 -->|ec.15| vs1_14
+    vs1_18 -->|ec.22| vs1_19
+    vs1_19 -->|ec.24| vs1_20
+    vs1_14 -->|ec.17| vs1_15
+    vs1_20 -->|ec.25| vs1_21
+    vs1_21 -->|ec.26| vs1_22
+    vs1_21 -->|ec.27| vs1_23
+    vs1_22 -->|ec.28| vs1_24
+    vs1_23 -->|ec.29| vs1_24
+    vs1_24 -->|ec.30| vs1_25
+    vs1_25 -->|ec.31| vs1_26
+    vs1_25 -->|ec.33| vs1_27
+    vs1_26 -->|ec.32| vs1_27
+    vs1_27 -->|ec.34| vs1_28
+    vs1_28 -->|ec.35| vs1_29
+    vs1_29 -->|ec.36| vs1_30
+    vs1_30 -->|ec.37| vs1_31
+    vs1_31 -->|ec.38| vs1_32
+    vs1_32 -->|ec.39| vs1_33
+    vs1_32 -->|ec.41| vs1_34
+    vs1_33 -->|ec.40| vs1_34
+    vs1_34 -->|ec.42| vs1_35
+    vs1_35 -->|ec.43| vs1_36
+    vs1_36 -->|ec.44| vs1_37
+    vs1_37 -->|ec.45| vs1_38
+    vs1_38 -->|ec.46| vs1_39
+    vs1_39 -->|ec.47| vs1_40
+    vs1_40 -->|ec.48| vs1_41
+    vs1_40 -->|ec.50| vs1_42
+    vs1_41 -->|ec.49| vs1_42
+    vs1_42 -->|ec.51| vs1_43
+    vs1_43 -->|ec.52| vs1_44
+    vs1_43 -->|ec.54| vs1_45
+    vs1_44 -->|ec.53| vs1_45
+    vs1_45 -->|ec.55| vs1_46
+    vs1_46 -->|ec.56| vs1_47
+    vs1_47 -->|ec.57| vs1_48
+    vs1_48 -->|ec.58| vs1_49
+    vs1_49 -->|ec.59| vs1_50
+    vs1_50 -->|ec.60| vs1_51
+    vs1_51 -->|ec.61| vs1_52
+    vs1_51 -->|ec.63| vs1_53
+    vs1_52 -->|ec.62| vs1_53
+    vs1_53 -->|ec.64| vs1_54
+    vs1_54 -->|ec.65| vs1_55
+    vs1_55 -->|ec.66| vs1_56
+    vs1_55 -->|ec.68| vs1_57
+    vs1_56 -->|ec.67| vs1_57
+    vs1_57 -->|ec.69| vs1_58
+    vs1_58 -->|ec.70| vs1_59
+    vs1_59 -->|ec.71| vs1_60
+    vs1_60 -->|ec.72| vs1_61
+    vs1_61 -->|ec.73| vs1_62
+    vs1_61 -->|ec.75| vs1_63
+    vs1_62 -->|ec.74| vs1_63
+    vs1_63 -->|ec.76| vs1_64
+    vs1_64 -->|ec.77| vs1_65
+    vs1_64 -->|ec.79| vs1_66
+    vs1_65 -->|ec.78| vs1_66
+    vs1_66 -->|ec.80| vs1_67
+    vs1_67 -->|ec.81| vs1_68
+    vs1_68 -->|ec.82| vs1_69
+    vs1_68 -->|ec.84| vs1_70
+    vs1_69 -->|ec.83| vs1_70
+    vs1_70 -->|ec.85| vs1_71
+    vs1_71 -->|ec.86| vs1_72
+    vs1_72 -->|ec.87| vs1_73
+    vs1_72 -->|ec.89| vs1_74
+    vs1_73 -->|ec.88| vs1_74
+    vs1_74 -->|ec.90| vs1_75
+    vs1_75 -->|ec.91| vs1_76
+    vs1_75 -->|ec.93| vs1_77
+    vs1_76 -->|ec.92| vs1_77
+    vs1_77 -->|ec.94| vs1_78
+    vs1_78 -->|ec.95| vs1_79
+    vs1_79 -->|ec.96| vs1_80
+    vs1_79 -->|ec.98| vs1_81
+    vs1_80 -->|ec.97| vs1_81
+    vs1_81 -->|ec.99| vs1_82
+    vs1_82 -->|ec.100| vs1_83
+    vs1_83 -->|ec.101| vs1_84
+    vs1_83 -->|ec.103| vs1_85
+    vs1_84 -->|ec.102| vs1_85
+    vs1_85 -->|ec.104| vs1_86
+    vs1_86 -->|ec.105| vs1_87
+    vs1_87 -->|ec.106| vs1_88
+    vs1_87 -->|ec.108| vs1_89
+    vs1_88 -->|ec.107| vs1_89
+    vs1_89 -->|ec.109| vs1_90
+    vs1_90 -->|ec.110| vs1_91
+    vs1_91 -->|ec.111| vs1_92
+    vs1_91 -->|ec.113| vs1_93
+    vs1_92 -->|ec.112| vs1_93
+    vs1_93 -->|ec.114| vs1_94
+    vs1_94 -->|ec.115| vs1_95
+    vs1_95 -->|ec.116| vs1_96
+    vs1_96 -->|ec.117| vs1_97
+    vs1_97 -->|ec.118| vs1_98
+    vs1_97 -->|ec.119| vs1_99
+    vs1_98 -->|ec.120| vs1_100
+    vs1_99 -->|ec.121| vs1_100
+    vs1_100 -->|ec.122| vs1_101
+    vs1_101 -->|ec.123| vs1_102
+    vs1_102 -->|ec.124| vs1_103
+    vs1_102 -->|ec.126| vs1_104
+    vs1_103 -->|ec.125| vs1_104
+    vs1_104 -->|ec.127| vs1_105
+    vs1_105 -->|ec.128| vs1_106
+    vs1_106 -->|ec.129| vs1_107
+    vs1_106 -->|ec.131| vs1_108
+    vs1_107 -->|ec.130| vs1_108
+    vs1_108 -->|ec.132| vs1_109
+    vs1_109 -->|ec.133| vs1_110
+    vs1_110 -->|ec.134| vs1_111
+    vs1_111 -->|ec.135| vs1_112
+    vs1_111 -->|ec.137| vs1_113
+    vs1_112 -->|ec.136| vs1_113
+    vs1_113 -->|ec.138| vs1_114
+    vs1_114 -->|ec.139| vs1_115
+    vs1_115 -->|ec.140| vs1_116
+    vs1_115 -->|ec.142| vs1_117
+    vs1_116 -->|ec.141| vs1_117
+    vs1_117 -->|ec.143| vs1_118
+    vs1_118 -->|ec.144| vs1_119
+    vs1_119 -->|ec.145| vs1_120
+    vs1_120 -->|ec.146| vs1_121
+    vs1_121 -->|ec.147| vs1_122
+    vs1_121 -->|ec.149| vs1_123
+    vs1_122 -->|ec.148| vs1_123
+    vs1_123 -->|ec.150| vs1_124
+    vs1_124 -->|ec.151| vs1_125
+    vs1_125 -->|ec.152| vs1_126
+    vs1_125 -->|ec.154| vs1_127
+    vs1_126 -->|ec.153| vs1_127
+    vs1_127 -->|ec.155| vs1_128
+    vs1_128 -->|ec.156| vs1_129
+    vs1_129 -->|ec.157| vs1_130
+    vs1_130 -->|ec.158| vs1_131
+    vs1_131 -->|ec.159| vs1_132
+    vs1_131 -->|ec.161| vs1_133
+    vs1_132 -->|ec.160| vs1_133
+    vs1_133 -->|ec.162| vs1_134
+    vs1_134 -->|ec.163| vs1_135
+    vs1_135 -->|ec.164| vs1_136
+    vs1_136 -->|ec.165| vs1_137
+    vs1_137 -->|ec.166| vs1_138
+    vs1_137 -->|ec.168| vs1_139
+    vs1_138 -->|ec.167| vs1_139
+    vs1_139 -->|ec.169| vs1_140
+    vs1_140 -->|ec.170| vs1_141
+    vs1_141 -->|ec.171| vs1_142
+    vs1_141 -->|ec.173| vs1_143
+    vs1_142 -->|ec.172| vs1_143
+    vs1_143 -->|ec.174| vs1_144
+    vs1_144 -->|ec.175| vs1_145
+    vs1_144 -->|ec.177| vs1_146
+    vs1_145 -->|ec.176| vs1_146
+    vs1_146 -->|ec.178| vs1_147
+    vs1_147 -->|ec.179| vs1_148
+    vs1_148 -->|ec.180| vs1_149
+    vs1_148 -->|ec.182| vs1_150
+    vs1_149 -->|ec.181| vs1_150
+    vs1_150 -->|ec.183| vs1_151
+    vs1_151 -->|ec.184| vs1_152
+    vs1_152 -->|ec.185| vs1_153
+    vs1_152 -->|ec.187| vs1_154
+    vs1_153 -->|ec.186| vs1_154
+    vs1_154 -->|ec.188| vs1_155
+    vs1_155 -->|ec.189| vs1_156
+    vs1_156 -->|ec.190| vs1_157
+    vs1_157 -->|ec.191| vs1_158
+    vs1_158 -->|ec.192| vs1_159
+    vs1_159 -->|ec.193| vs1_160
+    vs1_160 -->|ec.194| vs1_161
+    vs1_161 -->|ec.195| vs1_162
+    vs1_162 -->|ec.196| vs1_163
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8080';
+
+        function extractJson(raw) {
+            if (!raw || raw.trim() === '') return null;
+            try { return JSON.parse(raw); } catch (e) {
+                const s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
+                if (s !== -1 && e2 !== -1) {
+                    try { return JSON.parse(raw.substring(s, e2 + 1)); } catch (err) {}
+                }
+                return null;
+            }
+        }
+
+        let tcCardCounter = 0;
+
+        function renderTcCard(tc, badgeClass, badgeLabel) {
+            const cardId = tc.id || 'tc' + (++tcCardCounter);
+            const inputObj = tc.input || {};
+            const inputDisplay = JSON.stringify(inputObj, null, 2);
+            const expected = Array.isArray(tc.expected_output) ? tc.expected_output.join(', ') : (tc.expected_output || 'N/A');
+
+            let parsedPath = [];
+            if (Array.isArray(tc.dag_path)) parsedPath = tc.dag_path;
+            else if (typeof tc.dag_path === 'string') {
+                parsedPath = tc.dag_path.match(/(?:vs|vx|ec|ex)\d+\.\d+/g) || [];
+            }
+
+            const path = parsedPath.length > 0 ? parsedPath.map(n => '<span class="path-tag">' + n + '</span>').join('') : '';
+            const excType = tc.exception_type ? '<div class="tc-field"><strong>Exception:</strong> ' + tc.exception_type + '</div>' : '';
+
+            const edgeTagsDisplay = tc.dag_edges && tc.dag_edges.length > 0
+                ? `<div class="tc-field"><strong>DAG Edges:</strong> ${tc.dag_edges.map(eg => `<span class="path-tag" style="background:#fff3e0; color:#e65100;">${eg}</span>`).join('')}</div>`
+                : '';
+
+            return `
+            <div class="tc-card">
+                <div class="tc-header">
+                    <span class="tc-badge ${badgeClass}">${badgeLabel}</span>
+                    ${cardId} - ${tc.description || ''}
+                </div>
+                <div class="tc-field"><strong>Input:</strong> <code>${inputDisplay}</code></div>
+                <div class="tc-field"><strong>Expected:</strong> ${expected}</div>
+                ${excType}
+                ${path ? `<div class="tc-field"><strong>DAG Path:</strong> ${path}</div>` : ''}
+                ${edgeTagsDisplay}
+                <button class="btn btn-sm" onclick='trackTestCase("${cardId}", ${JSON.stringify(parsedPath)}, ${JSON.stringify(tc.dag_edges || [])})'>
+                    Track This
+                </button>
+                <div id="track-result-${cardId}" class="track-result"></div>
+            </div>`;
+        }
+
+        function trackTestCase(cardId, visitedNodes, visitedEdges) {
+            const resultDiv = document.getElementById('track-result-' + cardId);
+            const visited = visitedNodes || [];
+            const edges = visitedEdges || [];
+
+            fetch(API + '/track-coverage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: cardId, dag_path: visited, dag_edges: edges })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.coverage) {
+                    document.getElementById('cov-covmd').innerText = data.coverage.covmd + '%';
+                    document.getElementById('cov-covpc').innerText = data.coverage.covpc + '%';
+                    document.getElementById('cov-covic').innerText = data.coverage.covic + '%';
+                    document.getElementById('cov-covmc').innerText = data.coverage.covmc + '%';
+                    
+                    document.getElementById('cov-covet').innerText = data.coverage.covet + '%';
+                    document.getElementById('cov-covec').innerText = data.coverage.covec + '%';
+                    document.getElementById('cov-covety').innerText = data.coverage.covety + '%';
+                    document.getElementById('cov-covef').innerText = data.coverage.covef + '%';
+                    
+                    document.getElementById('cov-overall').innerText = data.coverage.overall + '%';
+                    
+                    if (cardId === "COMBINED_MIN_SUITE") {
+                        document.getElementById('active-tc-label').innerHTML = `Tracking accumulated metrics for the <strong>Entire Minimized Optimization Suite</strong>.`;
+                    } else {
+                        document.getElementById('active-tc-label').innerHTML = `Currently tracking metric contributions for: <strong>${cardId}</strong>`;
+                    }
+                }
+            })
+            .catch(err => { console.error("Error updates logic pipeline context boundary:", err); });
+
+            // Reset nodes style
+            document.querySelectorAll('.mermaid svg g.node rect, .mermaid svg g.node circle, .mermaid svg g.node polygon, .mermaid svg g.node path').forEach(el => {
+                el.style.fill = '#fde8e8'; 
+                el.style.stroke = '#e24b4a'; 
+                el.style.strokeWidth = '1px'; 
+                el.style.filter = '';
+            });
+
+            // Reset edge lines style
+            document.querySelectorAll('.mermaid svg .edgePath path.path').forEach(pathLine => {
+                pathLine.style.stroke = '#d9534f'; 
+                pathLine.style.strokeWidth = '1.5px'; 
+                pathLine.style.filter = '';
+            });
+
+            // Highlight visited nodes
+            document.querySelectorAll('.mermaid svg g.node').forEach(nodeEl => {
+                const fullText = nodeEl.textContent || '';
+                const match = fullText.match(/(?:vs|vx|ec|ex)\d+\.\d+/);
+                const nodeId = match ? match[0] : '';
+                const shapes = nodeEl.querySelectorAll('rect, circle, polygon, path');
+
+                if (visited.some(v => v.replace('_', '.').trim() === nodeId.replace('_', '.').trim())) {
+                    shapes.forEach(shape => {
+                        shape.style.fill = '#7fffd4'; 
+                        shape.style.stroke = '#008b5e'; 
+                        shape.style.strokeWidth = '4px';
+                        shape.style.filter = 'drop-shadow(0 0 8px #00c78c)';
+                    });
+                }
+            });
+
+            // Highlight matching edges path
+            document.querySelectorAll('.mermaid svg g.edgeLabels g.edgeLabel').forEach(labelGroup => {
+                const textContent = labelGroup.textContent.trim();
+                if (edges.includes(textContent)) {
+                    labelGroup.style.filter = 'drop-shadow(0 0 4px #00ff66)';
+                    
+                    const labelClasses = Array.from(labelGroup.classList);
+                    const matchingPathGroup = Array.from(document.querySelectorAll('.mermaid svg g.edgePaths g.edgePath')).find(pathG => {
+                        return labelClasses.some(cls => cls !== 'edgeLabel' && pathG.classList.contains(cls));
+                    });
+
+                    if (matchingPathGroup) {
+                        const pathLine = matchingPathGroup.querySelector('path.path');
+                        if (pathLine) {
+                            pathLine.style.stroke = '#00ff66'; 
+                            pathLine.style.strokeWidth = '8px'; 
+                            pathLine.style.filter = 'drop-shadow(0 0 8px #00ff66)'; 
+                        }
+                    }
+                }
+            });
+
+            if (cardId !== "COMBINED_MIN_SUITE") {
+                if (visited.length > 0) {
+                    resultDiv.innerHTML = '<div class="tc-field"><strong style="color:#1d9e75">Visited:</strong> ' + visited.map(n => '<span class="path-tag path-tag-visited">' + n + '</span>').join('') + '</div>';
+                } else {
+                    resultDiv.innerHTML = '<div style="color:#888;font-size:11px">No path data assigned to this testcase</div>';
+                }
+            }
+        }
+
+        async function generateTests() {
+            tcCardCounter = 0;
+            const loading = document.getElementById('tc-loading'), display = document.getElementById('tc-display');
+            loading.style.display = 'block'; display.innerHTML = '';
+
+            try {
+                const res = await fetch(API + '/generate-tests', { method: 'POST' });
+                const raw = await res.text();
+                loading.style.display = 'none';
+                const data = extractJson(raw);
+                if (!data) { display.innerHTML = '<pre style="font-size:10px;">' + raw + '</pre>'; return; }
+
+                let html = '';
+                if (data.normal_test_cases) data.normal_test_cases.forEach(tc => html += renderTcCard(tc, 'badge-normal', 'NORMAL'));
+                if (data.exception_test_cases) data.exception_test_cases.forEach(tc => html += renderTcCard(tc, 'badge-exception', 'EXCEPTION'));
+                if (data.edge_cases) data.edge_cases.forEach(tc => html += renderTcCard(tc, 'badge-edge', 'EDGE'));
+                display.innerHTML = html || '<pre style="font-size:10px">' + raw + '</pre>';
+            } catch (err) { display.innerHTML = '<p style="color:red;">Error: ' + err.message + '</p>'; }
+        }
+
+        async function getAllPaths() {
+            const section = document.getElementById('paths-section'), loading = document.getElementById('paths-loading'), display = document.getElementById('paths-display');
+            section.style.display = 'block'; loading.style.display = 'block'; display.innerHTML = '';
+
+            try {
+                const res = await fetch(API + '/get-all-paths', { method: 'POST' });
+                const raw = await res.text();
+                loading.style.display = 'none';
+                const data = extractJson(raw);
+                if (!data) { display.innerHTML = '<pre style="font-size:10px;">' + raw + '</pre>'; return; }
+
+                let html = '';
+                if (data.total_paths !== undefined) {
+                    html += `
+                    <div class="summary-box" style="background: #eef2ff; border: 1px solid #c7d2fe; padding: 14px; border-radius: 10px;">
+                        <div style="font-weight: 800; color: #3730a3; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Optimization: Maximum Set Cover
+                        </div>
+                        <strong>Total Paths Enumerated:</strong> ${data.total_paths} <br/>
+                        <strong>Minimized Suite Size:</strong> <span style="color:#1d9e75; font-weight:700;">${data.minimum_test_cases_for_max_coverage} Cases</span>
+                        
+                        <button class="btn" style="width:100%; margin-top:12px; margin-bottom:0; background:#4f46e5; text-transform: uppercase; font-size:11px; letter-spacing:0.5px;" 
+                            onclick='trackTestCase("COMBINED_MIN_SUITE", ${JSON.stringify(data.combined_union.nodes)}, ${JSON.stringify(data.combined_union.edges)})'>
+                            Visualize Combined Max Coverage (Union)
+                        </button>
+                    </div>
+                    <hr class="divider">
+                    `;
+                }
+                
+                if (data.minimum_test_suite) {
+                    html += '<div class="section-title">Individual Optimized Suite Cases</div>';
+                    data.minimum_test_suite.forEach(tc => html += renderTcCard(tc, 'badge-min', 'MIN SUITE'));
+                }
+                display.innerHTML = html;
+            } catch (err) { display.innerHTML = '<p style="color:red;">Error: ' + err.message + '</p>'; }
+        }
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const svg = document.querySelector('.mermaid svg');
+                if (svg) {
+                    svgPanZoom(svg, { zoomEnabled: true, controlIconsEnabled: true, fit: false, center: false, initialZoom: 1.5, minZoom: 0.2, maxZoom: 10 });
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+
+</html>

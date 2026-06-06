@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exception DAG Visualization</title>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default'
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+            padding: 0;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 420px;
+            min-width: 320px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px;
+            overflow-y: auto;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 10;
+        }
+
+        .main-graph {
+            margin-left: 420px;
+            width: calc(100vw - 420px);
+            height: 100vh;
+            overflow: auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+
+        .sidebar h2 {
+            font-size: 15px;
+            color: #1d9e75;
+            margin: 0 0 16px 0;
+            font-weight: 700;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 16px 0 8px 0;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid #d0d0d0;
+            font-size: 12px;
+            outline: none;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 9px 16px;
+            border: none;
+            border-radius: 7px;
+            background: #1d9e75;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .btn:hover { background: #178a65; }
+        .btn-sm { padding: 5px 12px; font-size: 11px; margin-top: 8px; margin-right: 0; }
+        .loading { color: #888; font-size: 12px; padding: 8px 0; display: none; }
+
+        .tc-card {
+            background: #fafafa;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .tc-header { font-size: 12px; font-weight: 700; color: #222; margin-bottom: 6px; }
+        .tc-field { font-size: 11px; color: #444; margin-bottom: 4px; line-height: 1.5; }
+        .tc-field strong { color: #222; }
+        .tc-field code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
+        .tc-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 6px; }
+        
+        .badge-normal { background: #e4f7ef; color: #0c6c52; }
+        .badge-exception { background: #fde8e8; color: #c0392b; }
+        .badge-edge { background: #fef6e4; color: #7d5a00; }
+        .badge-min { background: #f3e5f5; color: #6a1b9a; }
+
+        .path-tag { font-size: 10px; background: #f0f0f0; border-radius: 4px; padding: 2px 5px; margin-right: 3px; display: inline-block; }
+        .path-tag-visited { background: #c8f7e4; color: #0a5c42; }
+        .summary-box { background: #f0faf6; border: 1px solid #b2dfdb; border-radius: 7px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; }
+
+        .coverage-sticky-header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .cov-section-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 12px 0 6px 0;
+            border-bottom: 1px dashed #eee;
+            padding-bottom: 3px;
+        }
+
+        .cov-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .cov-card {
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .cov-label { font-size: 11px; font-weight: 700; color: #555; margin-bottom: 4px; }
+        .cov-value { font-size: 24px; font-weight: 800; color: #1d9e75; }
+        .cov-desc { font-size: 10px; color: #999; margin-top: 2px; }
+        .cov-overall-bar { display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #ddd; padding-top: 10px; margin-top: 12px; }
+        .cov-overall { font-size: 15px; font-weight: 800; color: #222; }
+        .cov-overall span { color: #1d9e75; font-size: 18px; }
+        .track-result { margin-top: 6px; font-size: 11px; }
+
+        .graph-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+            overflow: auto;
+            width: max-content;
+            min-width: 2600px;
+            min-height: 2200px;
+        }
+
+        .graph-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 16px; }
+        .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
+        .mermaid { width: max-content !important; height: max-content !important; overflow: visible !important; }
+        .mermaid svg { width: 2400px !important; height: 2200px !important; max-width: none !important; }
+    </style>
+</head>
+
+<body>
+
+    <div class="layout">
+        <div class="sidebar">
+            <h2>DAG Analysis Panel</h2>
+            <div class="section-title">Extracted Variables</div>
+            VARIABLE_INPUTS
+
+            <hr class="divider">
+            <div class="section-title">Actions</div>
+            <button class="btn" onclick="generateTests()">Generate Test Cases</button>
+            <button class="btn" onclick="getAllPaths()">Get All Possible Test Cases</button>
+
+            <hr class="divider">
+            <div class="section-title">AI Generated Testcases</div>
+            <div id="tc-loading" class="loading">Generating... please wait</div>
+            <div id="tc-display"></div>
+
+            <div id="paths-section" style="display:none">
+                <hr class="divider">
+                <div class="section-title">All Paths & Minimum Test Suite</div>
+                <div id="paths-loading" class="loading">Analysing paths... please wait</div>
+                <div id="paths-display"></div>
+            </div>
+        </div>
+
+        <div class="main-graph">
+            <div class="coverage-sticky-header">
+                <div class="section-title" style="margin-top: 0; margin-bottom: 12px; color: #1d9e75; font-size: 14px;">Live Cumulative Coverage Engine</div>
+                
+                <div class="cov-section-title">Cosdg Call Coverage</div>
+                <div class="cov-grid">
+                    <div class="cov-card">
+                        <div class="cov-label">Method Coverage (Covmd)</div>
+                        <div class="cov-value" id="cov-covmd">0%</div>
+                        <div class="cov-desc">Methods executed / total</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Polymorphic (Covpc)</div>
+                        <div class="cov-value" id="cov-covpc">0%</div>
+                        <div class="cov-desc">Polymorphic edges covered</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Inheritance (Covic)</div>
+                        <div class="cov-value" id="cov-covic">0%</div>
+                        <div class="cov-desc">Inherited methods exercised</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Total Call (Covmc)</div>
+                        <div class="cov-value" id="cov-covmc">0%</div>
+                        <div class="cov-desc">All call edges covered</div>
+                    </div>
+                </div>
+
+                <div class="cov-section-title" style="color: #d97706;">Exception Flow Coverage</div>
+                <div class="cov-grid">
+                    <div class="cov-card">
+                        <div class="cov-label">Throw Coverage (Covet)</div>
+                        <div class="cov-value" id="cov-covet" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Control dependencies hit</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Catch Coverage (Covec)</div>
+                        <div class="cov-value" id="cov-covec" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Catch clauses handled</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Exception Type (Covety)</div>
+                        <div class="cov-value" id="cov-covety" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Unique exception types hit</div>
+                    </div>
+                    <div class="cov-card">
+                        <div class="cov-label">Exception Flow (Covef)</div>
+                        <div class="cov-value" id="cov-covef" style="color: #d97706;">0%</div>
+                        <div class="cov-desc">Traversed flow paths</div>
+                    </div>
+                </div>
+
+                <div class="cov-overall-bar">
+                    <div style="font-size: 11px; color: #777;" id="active-tc-label">No target trace path actively focused.</div>
+                    <div class="cov-overall">
+                        Cumulative Suite Progress: <span id="cov-overall">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="graph-card">
+                <div class="graph-title">Extended COSDG - Exception Flow DAG</div>
+                <div class="mermaid">
+                    MERMAID_CONTENT
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8080';
+
+        function extractJson(raw) {
+            if (!raw || raw.trim() === '') return null;
+            try { return JSON.parse(raw); } catch (e) {
+                const s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
+                if (s !== -1 && e2 !== -1) {
+                    try { return JSON.parse(raw.substring(s, e2 + 1)); } catch (err) {}
+                }
+                return null;
+            }
+        }
+
+        let tcCardCounter = 0;
+
+        function renderTcCard(tc, badgeClass, badgeLabel) {
+            const cardId = tc.id || 'tc' + (++tcCardCounter);
+            const inputObj = tc.input || {};
+            const inputDisplay = JSON.stringify(inputObj, null, 2);
+            const expected = Array.isArray(tc.expected_output) ? tc.expected_output.join(', ') : (tc.expected_output || 'N/A');
+
+            let parsedPath = [];
+            if (Array.isArray(tc.dag_path)) parsedPath = tc.dag_path;
+            else if (typeof tc.dag_path === 'string') {
+                parsedPath = tc.dag_path.match(/(?:vs|vx|ec|ex)\d+\.\d+/g) || [];
+            }
+
+            const path = parsedPath.length > 0 ? parsedPath.map(n => '<span class="path-tag">' + n + '</span>').join('') : '';
+            const excType = tc.exception_type ? '<div class="tc-field"><strong>Exception:</strong> ' + tc.exception_type + '</div>' : '';
+
+            const edgeTagsDisplay = tc.dag_edges && tc.dag_edges.length > 0
+                ? `<div class="tc-field"><strong>DAG Edges:</strong> ${tc.dag_edges.map(eg => `<span class="path-tag" style="background:#fff3e0; color:#e65100;">${eg}</span>`).join('')}</div>`
+                : '';
+
+            return `
+            <div class="tc-card">
+                <div class="tc-header">
+                    <span class="tc-badge ${badgeClass}">${badgeLabel}</span>
+                    ${cardId} - ${tc.description || ''}
+                </div>
+                <div class="tc-field"><strong>Input:</strong> <code>${inputDisplay}</code></div>
+                <div class="tc-field"><strong>Expected:</strong> ${expected}</div>
+                ${excType}
+                ${path ? `<div class="tc-field"><strong>DAG Path:</strong> ${path}</div>` : ''}
+                ${edgeTagsDisplay}
+                <button class="btn btn-sm" onclick='trackTestCase("${cardId}", ${JSON.stringify(parsedPath)}, ${JSON.stringify(tc.dag_edges || [])})'>
+                    Track This
+                </button>
+                <div id="track-result-${cardId}" class="track-result"></div>
+            </div>`;
+        }
+
+        function trackTestCase(cardId, visitedNodes, visitedEdges) {
+            const resultDiv = document.getElementById('track-result-' + cardId);
+            const visited = visitedNodes || [];
+            const edges = visitedEdges || [];
+
+            fetch(API + '/track-coverage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: cardId, dag_path: visited, dag_edges: edges })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.coverage) {
+                    document.getElementById('cov-covmd').innerText = data.coverage.covmd + '%';
+                    document.getElementById('cov-covpc').innerText = data.coverage.covpc + '%';
+                    document.getElementById('cov-covic').innerText = data.coverage.covic + '%';
+                    document.getElementById('cov-covmc').innerText = data.coverage.covmc + '%';
+                    
+                    document.getElementById('cov-covet').innerText = data.coverage.covet + '%';
+                    document.getElementById('cov-covec').innerText = data.coverage.covec + '%';
+                    document.getElementById('cov-covety').innerText = data.coverage.covety + '%';
+                    document.getElementById('cov-covef').innerText = data.coverage.covef + '%';
+                    
+                    document.getElementById('cov-overall').innerText = data.coverage.overall + '%';
+                    
+                    if (cardId === "COMBINED_MIN_SUITE") {
+                        document.getElementById('active-tc-label').innerHTML = `Tracking accumulated metrics for the <strong>Entire Minimized Optimization Suite</strong>.`;
+                    } else {
+                        document.getElementById('active-tc-label').innerHTML = `Currently tracking metric contributions for: <strong>${cardId}</strong>`;
+                    }
+                }
+            })
+            .catch(err => { console.error("Error updates logic pipeline context boundary:", err); });
+
+            // Reset nodes style
+            document.querySelectorAll('.mermaid svg g.node rect, .mermaid svg g.node circle, .mermaid svg g.node polygon, .mermaid svg g.node path').forEach(el => {
+                el.style.fill = '#fde8e8'; 
+                el.style.stroke = '#e24b4a'; 
+                el.style.strokeWidth = '1px'; 
+                el.style.filter = '';
+            });
+
+            // Reset edge lines style
+            document.querySelectorAll('.mermaid svg .edgePath path.path').forEach(pathLine => {
+                pathLine.style.stroke = '#d9534f'; 
+                pathLine.style.strokeWidth = '1.5px'; 
+                pathLine.style.filter = '';
+            });
+
+            // Highlight visited nodes
+            document.querySelectorAll('.mermaid svg g.node').forEach(nodeEl => {
+                const fullText = nodeEl.textContent || '';
+                const match = fullText.match(/(?:vs|vx|ec|ex)\d+\.\d+/);
+                const nodeId = match ? match[0] : '';
+                const shapes = nodeEl.querySelectorAll('rect, circle, polygon, path');
+
+                if (visited.some(v => v.replace('_', '.').trim() === nodeId.replace('_', '.').trim())) {
+                    shapes.forEach(shape => {
+                        shape.style.fill = '#7fffd4'; 
+                        shape.style.stroke = '#008b5e'; 
+                        shape.style.strokeWidth = '4px';
+                        shape.style.filter = 'drop-shadow(0 0 8px #00c78c)';
+                    });
+                }
+            });
+
+            // Highlight matching edges path
+            document.querySelectorAll('.mermaid svg g.edgeLabels g.edgeLabel').forEach(labelGroup => {
+                const textContent = labelGroup.textContent.trim();
+                if (edges.includes(textContent)) {
+                    labelGroup.style.filter = 'drop-shadow(0 0 4px #00ff66)';
+                    
+                    const labelClasses = Array.from(labelGroup.classList);
+                    const matchingPathGroup = Array.from(document.querySelectorAll('.mermaid svg g.edgePaths g.edgePath')).find(pathG => {
+                        return labelClasses.some(cls => cls !== 'edgeLabel' && pathG.classList.contains(cls));
+                    });
+
+                    if (matchingPathGroup) {
+                        const pathLine = matchingPathGroup.querySelector('path.path');
+                        if (pathLine) {
+                            pathLine.style.stroke = '#00ff66'; 
+                            pathLine.style.strokeWidth = '8px'; 
+                            pathLine.style.filter = 'drop-shadow(0 0 8px #00ff66)'; 
+                        }
+                    }
+                }
+            });
+
+            if (cardId !== "COMBINED_MIN_SUITE") {
+                if (visited.length > 0) {
+                    resultDiv.innerHTML = '<div class="tc-field"><strong style="color:#1d9e75">Visited:</strong> ' + visited.map(n => '<span class="path-tag path-tag-visited">' + n + '</span>').join('') + '</div>';
+                } else {
+                    resultDiv.innerHTML = '<div style="color:#888;font-size:11px">No path data assigned to this testcase</div>';
+                }
+            }
+        }
+
+        async function generateTests() {
+            tcCardCounter = 0;
+            const loading = document.getElementById('tc-loading'), display = document.getElementById('tc-display');
+            loading.style.display = 'block'; display.innerHTML = '';
+
+            try {
+                const res = await fetch(API + '/generate-tests', { method: 'POST' });
+                const raw = await res.text();
+                loading.style.display = 'none';
+                const data = extractJson(raw);
+                if (!data) { display.innerHTML = '<pre style="font-size:10px;">' + raw + '</pre>'; return; }
+
+                let html = '';
+                if (data.normal_test_cases) data.normal_test_cases.forEach(tc => html += renderTcCard(tc, 'badge-normal', 'NORMAL'));
+                if (data.exception_test_cases) data.exception_test_cases.forEach(tc => html += renderTcCard(tc, 'badge-exception', 'EXCEPTION'));
+                if (data.edge_cases) data.edge_cases.forEach(tc => html += renderTcCard(tc, 'badge-edge', 'EDGE'));
+                display.innerHTML = html || '<pre style="font-size:10px">' + raw + '</pre>';
+            } catch (err) { display.innerHTML = '<p style="color:red;">Error: ' + err.message + '</p>'; }
+        }
+
+        async function getAllPaths() {
+            const section = document.getElementById('paths-section'), loading = document.getElementById('paths-loading'), display = document.getElementById('paths-display');
+            section.style.display = 'block'; loading.style.display = 'block'; display.innerHTML = '';
+
+            try {
+                const res = await fetch(API + '/get-all-paths', { method: 'POST' });
+                const raw = await res.text();
+                loading.style.display = 'none';
+                const data = extractJson(raw);
+                if (!data) { display.innerHTML = '<pre style="font-size:10px;">' + raw + '</pre>'; return; }
+
+                let html = '';
+                if (data.total_paths !== undefined) {
+                    html += `
+                    <div class="summary-box" style="background: #eef2ff; border: 1px solid #c7d2fe; padding: 14px; border-radius: 10px;">
+                        <div style="font-weight: 800; color: #3730a3; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Optimization: Maximum Set Cover
+                        </div>
+                        <strong>Total Paths Enumerated:</strong> ${data.total_paths} <br/>
+                        <strong>Minimized Suite Size:</strong> <span style="color:#1d9e75; font-weight:700;">${data.minimum_test_cases_for_max_coverage} Cases</span>
+                        
+                        <button class="btn" style="width:100%; margin-top:12px; margin-bottom:0; background:#4f46e5; text-transform: uppercase; font-size:11px; letter-spacing:0.5px;" 
+                            onclick='trackTestCase("COMBINED_MIN_SUITE", ${JSON.stringify(data.combined_union.nodes)}, ${JSON.stringify(data.combined_union.edges)})'>
+                            Visualize Combined Max Coverage (Union)
+                        </button>
+                    </div>
+                    <hr class="divider">
+                    `;
+                }
+                
+                if (data.minimum_test_suite) {
+                    html += '<div class="section-title">Individual Optimized Suite Cases</div>';
+                    data.minimum_test_suite.forEach(tc => html += renderTcCard(tc, 'badge-min', 'MIN SUITE'));
+                }
+                display.innerHTML = html;
+            } catch (err) { display.innerHTML = '<p style="color:red;">Error: ' + err.message + '</p>'; }
+        }
+
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const svg = document.querySelector('.mermaid svg');
+                if (svg) {
+                    svgPanZoom(svg, { zoomEnabled: true, controlIconsEnabled: true, fit: false, center: false, initialZoom: 1.5, minZoom: 0.2, maxZoom: 10 });
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+
+</html>

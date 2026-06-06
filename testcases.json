@@ -1,0 +1,508 @@
+{
+  "normal_test_cases": [
+    {
+      "id": "TC7",
+      "description": "Deterministic Test Dataset Row 7 (Route Matrix Path Simulation 7)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 7",
+        "age": 34,
+        "a": 40,
+        "b": 0
+      },
+      "expected_output": [],
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vs1.11",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ec.09",
+        "ec.13",
+        "ec.15"
+      ]
+    }
+  ],
+  "exception_test_cases": [
+    {
+      "id": "TC1",
+      "description": "Deterministic Test Dataset Row 1 (Route Matrix Path Simulation 1)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 1",
+        "age": 16,
+        "a": 10,
+        "b": 0
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vx2.07",
+        "vs1.12",
+        "vs1.13"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ex.01",
+        "ec.10",
+        "ec.11"
+      ]
+    },
+    {
+      "id": "TC2",
+      "description": "Deterministic Test Dataset Row 2 (Route Matrix Path Simulation 2)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 2",
+        "age": 19,
+        "a": 15,
+        "b": 2
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vx2.08",
+        "vs1.14",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ex.02",
+        "ec.12",
+        "ec.14",
+        "ec.15"
+      ]
+    },
+    {
+      "id": "TC3",
+      "description": "Deterministic Test Dataset Row 3 (Route Matrix Path Simulation 3)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 3",
+        "age": 22,
+        "a": 20,
+        "b": 4
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vx2.07",
+        "vs1.12",
+        "vs1.13"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ex.03",
+        "ec.10",
+        "ec.11"
+      ]
+    },
+    {
+      "id": "TC4",
+      "description": "Deterministic Test Dataset Row 4 (Route Matrix Path Simulation 4)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 4",
+        "age": 25,
+        "a": 25,
+        "b": 0
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vx2.08",
+        "vs1.14",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ex.04",
+        "ec.12",
+        "ec.14",
+        "ec.15"
+      ]
+    },
+    {
+      "id": "TC5",
+      "description": "Deterministic Test Dataset Row 5 (Route Matrix Path Simulation 5)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 5",
+        "age": 28,
+        "a": 30,
+        "b": 8
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vs1.11",
+        "vx2.07",
+        "vs1.12",
+        "vs1.13"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ec.09",
+        "ex.05",
+        "ec.10",
+        "ec.11"
+      ]
+    },
+    {
+      "id": "TC6",
+      "description": "Deterministic Test Dataset Row 6 (Route Matrix Path Simulation 6)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 6",
+        "age": 31,
+        "a": 35,
+        "b": 10
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.03",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vs1.11",
+        "vx2.08",
+        "vs1.14",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.02",
+        "ec.04",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ec.09",
+        "ex.06",
+        "ec.12",
+        "ec.14",
+        "ec.15"
+      ]
+    },
+    {
+      "id": "TC8",
+      "description": "Deterministic Test Dataset Row 8 (Route Matrix Path Simulation 8)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 8",
+        "age": 37,
+        "a": 45,
+        "b": 14
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vx2.07",
+        "vs1.12",
+        "vs1.13"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ex.01",
+        "ec.10",
+        "ec.11"
+      ]
+    },
+    {
+      "id": "TC9",
+      "description": "Deterministic Test Dataset Row 9 (Route Matrix Path Simulation 9)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 9",
+        "age": 40,
+        "a": 50,
+        "b": 16
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vx2.08",
+        "vs1.14",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ex.02",
+        "ec.12",
+        "ec.14",
+        "ec.15"
+      ]
+    },
+    {
+      "id": "TC10",
+      "description": "Deterministic Test Dataset Row 10 (Route Matrix Path Simulation 10)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 10",
+        "age": 43,
+        "a": 55,
+        "b": 0
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vx2.07",
+        "vs1.12",
+        "vs1.13"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ex.03",
+        "ec.10",
+        "ec.11"
+      ]
+    },
+    {
+      "id": "TC11",
+      "description": "Deterministic Test Dataset Row 1 (Route Matrix Path Simulation 11)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 1",
+        "age": 16,
+        "a": 10,
+        "b": 0
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vx2.08",
+        "vs1.14",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ex.04",
+        "ec.12",
+        "ec.14",
+        "ec.15"
+      ]
+    },
+    {
+      "id": "TC12",
+      "description": "Deterministic Test Dataset Row 2 (Route Matrix Path Simulation 12)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 2",
+        "age": 19,
+        "a": 15,
+        "b": 2
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vs1.11",
+        "vx2.07",
+        "vs1.12",
+        "vs1.13"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ec.09",
+        "ex.05",
+        "ec.10",
+        "ec.11"
+      ]
+    },
+    {
+      "id": "TC13",
+      "description": "Deterministic Test Dataset Row 3 (Route Matrix Path Simulation 13)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 3",
+        "age": 22,
+        "a": 20,
+        "b": 4
+      },
+      "expected_output": [],
+      "exception_type": "java.lang.Exception",
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vs1.11",
+        "vx2.08",
+        "vs1.14",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ec.09",
+        "ex.06",
+        "ec.12",
+        "ec.14",
+        "ec.15"
+      ]
+    }
+  ],
+  "edge_cases": [
+    {
+      "id": "TC14",
+      "description": "Deterministic Test Dataset Row 4 (Route Matrix Path Simulation 14)",
+      "input": {
+        "msg": "Deterministic Test Dataset Row 4",
+        "age": 25,
+        "a": 25,
+        "b": 0
+      },
+      "expected_output": [],
+      "dag_path": [
+        "vs1.01",
+        "vs1.02",
+        "vs1.04",
+        "vs1.05",
+        "vx1.06",
+        "vs1.09",
+        "vs1.10",
+        "vs1.11",
+        "vx3.15",
+        "vs1.16"
+      ],
+      "dag_edges": [
+        "ec.01",
+        "ec.03",
+        "ec.05",
+        "ec.06",
+        "ec.07",
+        "ec.08",
+        "ec.09",
+        "ec.13",
+        "ec.15"
+      ]
+    }
+  ]
+}

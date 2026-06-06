@@ -1,0 +1,33 @@
+public class CoverageTestEngine {
+
+    public void executeTransaction(int age, int a, int b) {
+        String status = "INITIALIZED";
+        
+        // 1. Normal conditional structure to test Covpc (Polymorphic/Branch)
+        if (age < 18) {
+            status = "UNDERAGE_REJECT";
+            return;
+        } else {
+            status = "AGE_VERIFIED";
+        }
+
+        // 2. Try-catch block handling mathematical evaluation anomalies
+        try {
+            status = "PROCESSING_DIVISION";
+            int result = a / b; // Will throw ArithmeticException if b == 0
+            status = "DIVISION_SUCCESS";
+            
+        } catch (ArithmeticException ex) {
+            status = "CATCH_ARITHMETIC_EXCEPTION";
+            
+            // 3. Explicit throw statement to test Covet (Throw Coverage)
+            throw new IllegalArgumentException("Division fallback failed due to zero denominator");
+            
+        } catch (Exception ex) {
+            status = "CATCH_GENERIC_FALLBACK";
+        } finally {
+            // 4. Finally block execution path monitoring
+            status = "TRANSACTION_TERMINATED";
+        }
+    }
+}

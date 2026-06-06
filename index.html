@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journal Calibration: Fixed ACSDG View</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: false,
+                htmlLabels: true
+            }
+        });
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 32px;
+            width: 90%;
+            max-width: 1100px;
+            border: 1px solid #e2e8f0;
+        }
+        h1 {
+            color: #0f172a;
+            font-size: 22px;
+            margin-top: 0;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #34d399;
+            padding-bottom: 8px;
+        }
+        p {
+            color: #475569;
+            font-size: 14px;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+        .mermaid-wrapper {
+            display: flex;
+            justify-content: center;
+            background: #fafafa;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 16px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Extended COSDG Exception Flow DAG Model</h1>
+        <p>
+            This is the hardcoded blueprint of your 1000+ line execution matrix structure. 
+            It connects standard sequential paths using solid black lines, while mapping implicit runtime anomalies down to their respective 
+            <code>CATCH_START</code> blocks via red dashed exception vectors (<code>ex.01</code> to <code>ex.06</code>).
+        </p>
+
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                flowchart TD
+                    %% ==========================================
+                    %% PHASE 1: PRE-CONDITIONS
+                    %% ==========================================
+                    v1["vs1.01<br/>VAR_DECL"] -->|ec.01| v2["vs1.02<br/>IF_EVAL [routingToken==null]"]
+                    v2 -->|ec.02| v3["vs1.03<br/>STMT [dispatchSystemAlert]"]
+                    v2 -->|ec.03| v4["vs1.04<br/>IF_EVAL [routingToken == ROOT]"]
+                    
+                    v4 -->|ec.04| v5["vs1.05<br/>STMT [batchSize > 5000]"]
+                    v4 -->|ec.05| v6["vs1.06<br/>END_IF"]
+                    v5 -->|ec.06| v6
+                    v3 -->|ec.07| v7["vs1.07<br/>IF_EVAL [batchSize <= 0]"]
+                    v6 -->|ec.08| v7
+
+                    %% ==========================================
+                    %% PHASE 2: CORE LOOP & TRY-CATCH MODULE
+                    %% ==========================================
+                    v7 -->|ec.09| v9["vs1.09<br/>TRY_BLOCK_START [while]"]
+                    
+                    %% Main interior execution points
+                    v9 -->|ec.10| v10["vs1.10<br/>STMT [assertValidity]"]
+                    v10 -->|ec.11| v11["vs1.11<br/>STMT [flushRegisters]"]
+                    
+                    %% Exceptional Dotted Projections Arcs (Red Lines)
+                    v10 -.->|ex.01| cx1
+                    v10 -.->|ex.02| cx2
+                    v11 -.->|ex.03| cx1
+                    v11 -.->|ex.04| cx2
+                    
+                    %% Internal deep nested conditional math paths
+                    v11 -->|ec.12| v12["vs1.12<br/>IF_EVAL [batchSize & 0x0F == 7]"]
+                    v12 -.->|ex.05| cx1
+                    v12 -.->|ex.06| cx2
+
+                    %% Target Exception Catch Terminal Blocks (Highlighted Light Red)
+                    cx1["vx2.07<br/>CATCH_START<br/>[ArithmeticException]"]
+                    cx2["vx2.08<br/>CATCH_START<br/>[Exception]"]
+                    
+                    style cx1 fill:#ffebe9,stroke:#ff8181,stroke-width:2px;
+                    style cx2 fill:#ffebe9,stroke:#ff8181,stroke-width:2px;
+
+                    %% ==========================================
+                    %% PHASE 3: CASCADING STATE LOGIC TRAIL
+                    %% ==========================================
+                    v12 -->|ec.13| s1["vs1.14<br/>IF_EVAL [batchSize > 10]"]
+                    cx1 -->|ec.14| s1
+                    cx2 -->|ec.15| s1
+
+                    s1 -->|ec.16| s2["vs1.15<br/>IF_EVAL [stateCursor > 0]"]
+                    s2 -->|ec.17| s3["vs1.16<br/>IF_EVAL [batchSize > 20]"]
+                    s3 -->|ec.18| s4["vs1.17<br/>IF_EVAL [stateCursor > 1]"]
+                    
+                    %% Final terminal exit collection sink node
+                    s4 -->|ec.19| sEnd["vs1.1000<br/>STMT [ULTRA_PIPELINE_TERMINATION]"]
+                    
+                    %% Styling normal nodes for easy parsing visual quality
+                    style v1 fill:#e6f4ea,stroke:#34d399,stroke-width:2px;
+                    style v2 fill:#e6f4ea,stroke:#34d399,stroke-width:2px;
+                    style v9 fill:#e8f0fe,stroke:#1a73e8,stroke-width:2px;
+                    style sEnd fill:#e6f4ea,stroke:#34d399,stroke-width:2px;
+
+                    %% Red link custom property injection overrides
+                    linkStyle 10 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+                    linkStyle 11 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+                    linkStyle 12 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+                    linkStyle 13 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+                    linkStyle 15 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+                    linkStyle 16 stroke:#ef4444,stroke-width:2px,stroke-dasharray: 5 5;
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

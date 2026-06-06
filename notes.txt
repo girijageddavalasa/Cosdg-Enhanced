@@ -1,0 +1,161 @@
+mvn clean compile exec:java -Dexec.mainClass="com.example.dag.Main" -Dexec.args="code.txt"
+
+STOP asking Ollama for:
+
+dag_path
+
+Instead:
+
+Ollama should ONLY generate:
+
+description
+input
+expected output
+
+NOT node IDs.
+
+
+
+
+taskkill /F /IM java.exe
+rmdir /s /q target
+mvn clean compile exec:java -Dexec.mainClass="com.example.dag.Main" -Dexec.args="code.txt"
+
+
+import java.util.Scanner;
+
+// Custom Exception 1
+class InvalidAgeException extends Exception {
+    public InvalidAgeException(String msg) {
+        super(msg);
+    }
+}
+
+// Custom Exception 2
+class InvalidMarksException extends Exception {
+    public InvalidMarksException(String msg) {
+        super(msg);
+    }
+}
+
+// Custom Exception 3
+class InvalidAttendanceException extends Exception {
+    public InvalidAttendanceException(String msg) {
+        super(msg);
+    }
+}
+
+public class StudentResultSystem {
+
+    // Method to validate age
+    public static void checkAge(int age) throws InvalidAgeException {
+        if (age < 18) {
+            throw new InvalidAgeException("Age must be 18 or above");
+        }
+    }
+
+    // Method to validate marks
+    public static void checkMarks(int marks) throws InvalidMarksException {
+        if (marks < 0 || marks > 100) {
+            throw new InvalidMarksException("Marks should be between 0 and 100");
+        }
+    }
+
+    // Method to validate attendance
+    public static void checkAttendance(int attendance)
+            throws InvalidAttendanceException {
+
+        if (attendance < 75) {
+            throw new InvalidAttendanceException(
+                    "Attendance is below minimum requirement"
+            );
+        }
+    }
+
+    // Method to calculate grade
+    public static String calculateGrade(int marks) {
+
+        if (marks >= 90) {
+            return "A Grade";
+        }
+        else if (marks >= 75) {
+            return "B Grade";
+        }
+        else if (marks >= 50) {
+            return "C Grade";
+        }
+        else {
+            return "Fail";
+        }
+    }
+
+    public static void main(String[] args) {
+
+        Scanner sc = new Scanner(System.in);
+
+        try {
+
+            System.out.println("===== Student Result System =====");
+
+            // Input student details
+            System.out.print("Enter Student Name: ");
+            String name = sc.nextLine();
+
+            System.out.print("Enter Age: ");
+            int age = sc.nextInt();
+
+            System.out.print("Enter Marks: ");
+            int marks = sc.nextInt();
+
+            System.out.print("Enter Attendance Percentage: ");
+            int attendance = sc.nextInt();
+
+            // Validation checks
+            checkAge(age);
+            checkMarks(marks);
+            checkAttendance(attendance);
+
+            // Grade calculation
+            String grade = calculateGrade(marks);
+
+            // Display result
+            System.out.println("\n===== RESULT =====");
+            System.out.println("Student Name : " + name);
+            System.out.println("Age          : " + age);
+            System.out.println("Marks        : " + marks);
+            System.out.println("Attendance   : " + attendance + "%");
+            System.out.println("Grade        : " + grade);
+
+            // Additional outputs
+            System.out.println("Result processing completed");
+            System.out.println("Student data validated successfully");
+            System.out.println("System exiting normally");
+
+        }
+
+        // Catch blocks
+        catch (InvalidAgeException e) {
+            System.out.println("Age Error: " + e.getMessage());
+        }
+
+        catch (InvalidMarksException e) {
+            System.out.println("Marks Error: " + e.getMessage());
+        }
+
+        catch (InvalidAttendanceException e) {
+            System.out.println("Attendance Error: " + e.getMessage());
+        }
+
+        catch (Exception e) {
+            System.out.println("General Error: " + e.getMessage());
+        }
+
+        finally {
+            System.out.println("Program Finished");
+        }
+
+        sc.close();
+    }
+}
+
+
