@@ -11,6 +11,9 @@ public class CoverageTracker {
     private final Set<String> coveredNodes = new LinkedHashSet<>();
     private final Set<String> coveredEdges = new LinkedHashSet<>();
     private final Set<String> trackedTestcases = new LinkedHashSet<>();
+    private final Map<String, Set<String>> markedExceptionTypes = new LinkedHashMap<>();
+    private final Set<String> taggedClassMemberEdges = new LinkedHashSet<>();
+    private boolean runtimeObserved;
 
     // =====================================================
     // TOTAL COUNTS
@@ -22,8 +25,8 @@ public class CoverageTracker {
     // CONSTRUCTOR
     // =====================================================
     public CoverageTracker(int totalNodes, int totalEdges) {
-        this.totalNodes = totalNodes == 0 ? 1 : totalNodes;
-        this.totalEdges = totalEdges == 0 ? 1 : totalEdges;
+        this.totalNodes = totalNodes;
+        this.totalEdges = totalEdges;
     }
 
     // =====================================================
@@ -71,9 +74,10 @@ public class CoverageTracker {
         // ================================================
         // CALCULATE COVERAGE
         // ================================================
-        double nodeCoverage = (coveredNodes.size() * 100.0) / totalNodes;
-        double edgeCoverage = (coveredEdges.size() * 100.0) / totalEdges;
-        double overallCoverage = (nodeCoverage + edgeCoverage) / 2.0;
+        Double nodeCoverage = totalNodes == 0 ? null : (coveredNodes.size() * 100.0) / totalNodes;
+        Double edgeCoverage = totalEdges == 0 ? null : (coveredEdges.size() * 100.0) / totalEdges;
+        // There is no paper-defined arithmetic mean of node and edge coverage.
+        Double overallCoverage = null;
 
         // ================================================
         // RETURN UPDATE OBJECT
@@ -82,17 +86,39 @@ public class CoverageTracker {
                 tc.id,
                 round(nodeCoverage),
                 round(edgeCoverage),
-                round(overallCoverage),
+                overallCoverage,
                 newNodes,
                 newEdges
         );
     }
 
-    private double round(double v) {
-        return Math.round(v * 100.0) / 100.0;
+    private Double round(Double v) {
+        return v == null ? null : Math.round(v * 100.0) / 100.0;
     }
 
     public Set<String> getCoveredEdges() { return coveredEdges; }
     public Set<String> getCoveredNodes() { return coveredNodes; }
     public Set<String> getTrackedTestcases() { return trackedTestcases; }
+
+    public void markRuntime(String testCase, Collection<String> nodes, Collection<String> edges,
+                            Collection<String> taggedMembers, Map<String, Set<String>> exceptionTypes) {
+        runtimeObserved = true;
+        if (nodes != null) nodes.forEach(node -> coveredNodes.add(node.replace('.', '_')));
+        if (edges != null) coveredEdges.addAll(edges);
+        if (taggedMembers != null) taggedClassMemberEdges.addAll(taggedMembers);
+        if (exceptionTypes != null) exceptionTypes.forEach((node, types) ->
+            markedExceptionTypes.computeIfAbsent(node.replace('.', '_'), ignored -> new LinkedHashSet<>()).addAll(types));
+        trackedTestcases.add(testCase == null ? "runtime-test" : testCase);
+    }
+
+    public boolean isRuntimeObserved() { return runtimeObserved; }
+
+    public CoverageAnalyzer.CoverageMarking toMarking() {
+        return runtimeObserved
+            ? new CoverageAnalyzer.CoverageMarking(coveredNodes, coveredEdges,
+                taggedClassMemberEdges.isEmpty() ? null : taggedClassMemberEdges,
+                markedExceptionTypes, true,
+                Set.of("statement", "method", "polymorphic", "throw", "catch", "exceptionType", "exceptionFlow"))
+            : CoverageAnalyzer.CoverageMarking.staticPrediction(coveredNodes, coveredEdges);
+    }
 }

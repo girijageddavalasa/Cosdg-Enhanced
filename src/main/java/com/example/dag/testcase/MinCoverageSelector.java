@@ -10,12 +10,14 @@ import java.util.Set;
  * Greedy set-cover algorithm.
  *
  * Given a list of generated test cases (each covering a set of edges),
- * returns the MINIMUM subset of test cases that covers ALL edges
+ * returns a greedy approximate subset that covers edges observed in the supplied candidates
  * seen across all paths.
  *
  * This is purely deterministic — no LLM involved.
  */
 public class MinCoverageSelector {
+    public record SelectionResult(List<ScoredTestCase> selected, boolean approximate,
+                                  boolean candidatePathsTruncated) {}
 
     // ============================================================
     // INPUT: a generated test case + the edges it covers
@@ -40,8 +42,8 @@ public class MinCoverageSelector {
     // ============================================================
 
     /**
-     * Returns the minimum list of ScoredTestCase entries that
-     * collectively cover every edge appearing in any test case.
+     * Returns the greedy selected list of ScoredTestCase entries that
+     * collectively covers edges appearing in the supplied candidates.
      *
      * Greedy strategy: at each step pick the test case that
      * covers the most currently-uncovered edges.
@@ -86,5 +88,9 @@ public class MinCoverageSelector {
         }
 
         return selected;
+    }
+
+    public static SelectionResult selectGreedy(List<ScoredTestCase> all, boolean candidatePathsTruncated) {
+        return new SelectionResult(List.copyOf(selectMinimum(all)), true, candidatePathsTruncated);
     }
 }

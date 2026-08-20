@@ -8,7 +8,17 @@ public class Node {
 
   public String type;
 
+  /** Canonical-export ownership metadata; the legacy id remains unchanged. */
+  public String program;
+  public String sourceFile;
+  public String classId;
+  public String methodId;
+  public int sourceLine = -1;
+
   public List<Edge> edges = new ArrayList<>();
+
+  /** Static exception types associated with throw/catch vertices. */
+  public Set<String> exceptionTypes = new LinkedHashSet<>();
 
   // ====================================================
   // COVERAGE + ML SUPPORT
@@ -26,14 +36,21 @@ public class Node {
     this.type = type;
   }
 
-  public void addEdge(
+  public Edge addEdge(
       Node to,
       String label) {
 
-    edges.add(
-        new Edge(
-            this,
-            to,
-            label));
+    return addEdge(to, label, "UNSPECIFIED", null);
+  }
+
+  public Edge addEdge(
+      Node to,
+      String label,
+      String type,
+      String branch) {
+
+    Edge edge = new Edge(this, to, label, type, branch);
+    edges.add(edge);
+    return edge;
   }
 }

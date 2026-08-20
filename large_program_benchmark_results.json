@@ -1,0 +1,104 @@
+{
+  "result": {
+    "program": "synthetic5000",
+    "sourceFileCount": 1,
+    "sourceFiles": [
+      "benchmarks\\Synthetic5000.java"
+    ],
+    "classCount": 25,
+    "methodCount": 500,
+    "statementCount": 5000,
+    "syntaxErrors": 0,
+    "vertices": 7475,
+    "edges": 14350,
+    "vertexTypes": {
+      "class_entry": 25,
+      "method_entry": 500,
+      "statement": 4525,
+      "call": 475,
+      "parameter": 1950,
+      "try": 0,
+      "catch": 0
+    },
+    "edgeTypes": {
+      "control": 6950,
+      "data": 5475,
+      "class_member": 500,
+      "inheritance": 0,
+      "method_call": 475,
+      "simple_method_call": 475,
+      "inherited_method_call": 0,
+      "polymorphic_call": 0,
+      "parameter_in": 475,
+      "parameter_out": 475,
+      "summary": 0,
+      "exception_throw": 0,
+      "exception_catch": 0
+    },
+    "medianParseMs": 272.321,
+    "medianGraphMs": 69.212,
+    "medianTotalMs": 341.533,
+    "medianHeapBeforeBytes": 7433088,
+    "medianHeapAfterParseBytes": 17657864,
+    "medianHeapAfterGraphBytes": 23143608,
+    "medianGraphHeapIncreaseBytes": 5485744,
+    "approximateBytesPerGraphElement": 251.35138602520047,
+    "verticesPerStatement": 1.495,
+    "edgesPerStatement": 2.87,
+    "parseMsSamples": [
+      303.794,
+      267.519,
+      272.321,
+      261.827,
+      258.589,
+      273.113,
+      331.049
+    ],
+    "graphMsSamples": [
+      76.839,
+      64.172,
+      69.212,
+      63.931,
+      69.221,
+      92.907,
+      64.826
+    ],
+    "graphHeapIncreaseSamples": [
+      5485960,
+      5485744,
+      5485744,
+      5485744,
+      5485776,
+      5485744,
+      5485808
+    ],
+    "medianJsonExportMs": 29.2,
+    "medianJsonExportBytes": 1768760,
+    "medianMermaidGenerationMs": 0.936,
+    "medianMermaidBytes": 31639,
+    "currentMermaidReachableVertices": 299,
+    "currentMermaidReachableEdges": 574
+  },
+  "metadata": {
+    "generatedAt": "2026-08-20T14:55:46.803902600Z",
+    "javaVersion": "17.0.19",
+    "vmName": "OpenJDK 64-Bit Server VM",
+    "os": "Windows 11 10.0",
+    "warmupRuns": 2,
+    "measuredRuns": 7,
+    "timing": "System.nanoTime; parsing and graph construction timed separately; GC excluded",
+    "memory": "Runtime used heap after explicit GC; graph increase \u003d after graph - after parse; approximate, not object sizing",
+    "statementDefinition": "local declarators + non-block statement grammar nodes + catch clauses",
+    "multiFileMode": "independent compilation units aggregated; no cross-file linking",
+    "varBugStatus": "fixed by handling the grammar\u0027s VAR local-declaration alternative",
+    "excluded": [
+      "HTML/template file I/O",
+      "SVG layout",
+      "path enumeration",
+      "test generation",
+      "coverage analysis",
+      "browser rendering"
+    ],
+    "exportTiming": "compact full-graph JSON DTO and current reachable-root Mermaid text; template/file I/O/browser excluded"
+  }
+}

@@ -2,96 +2,83 @@ package com.example.dag.testcase;
 
 import com.example.dag.graph.Edge;
 import com.example.dag.graph.Node;
+import java.util.*;
+import java.util.function.BooleanSupplier;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-/**
- * Bounded path enumerator to prevent exponential path explosion
- * and OutOfMemoryError in large/looping programs.
- */
-public class PathEnumerator {
-
-    // Global threshold guard to protect JVM heap memory limits
-    private static final int PATH_COUNT_HARD_LIMIT = 5000;
-
-    public static class EnumeratedPath {
-        public final List<String> nodeIds;
-        public final List<String> edgeLabels;
-
-        public EnumeratedPath(List<String> nodeIds, List<String> edgeLabels) {
-            this.nodeIds = new ArrayList<>(nodeIds);
-            this.edgeLabels = new ArrayList<>(edgeLabels);
-        }
-
-        public String toPathString() {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < nodeIds.size(); i++) {
-                sb.append(nodeIds.get(i));
-                if (i < edgeLabels.size()) {
-                    sb.append(" --(").append(edgeLabels.get(i)).append(")--> ");
-                }
-            }
-            return sb.toString();
-        }
+/** Resource-bounded enumeration of the project's dependency-graph walks. */
+public final class PathEnumerator {
+  public static final int DEFAULT_PATH_LIMIT = 5_000;
+  public static final int DEFAULT_PATH_LENGTH_LIMIT = 1_000;
+  public static final long DEFAULT_STATE_LIMIT = 250_000;
+  public static final long DEFAULT_TIME_LIMIT_MS = 2_000;
+  public static final int HARD_PATH_LIMIT = 5_000;
+  public static final int HARD_PATH_LENGTH_LIMIT = 2_000;
+  public static final long HARD_STATE_LIMIT = 1_000_000;
+  public static final long HARD_TIME_LIMIT_MS = 30_000;
+  public enum Status { COMPLETE, TRUNCATED, CANCELLED }
+  public enum StopReason { NONE, PATH_LIMIT, PATH_LENGTH_LIMIT, TRAVERSAL_STATE_LIMIT, TIME_LIMIT, CANCELLED }
+  public record Options(int maxPaths, int maxPathLength, long maxTraversalStates,
+                        long timeBudgetMillis, BooleanSupplier cancelled) {
+    public Options {
+      maxPaths = Math.max(1, Math.min(maxPaths, HARD_PATH_LIMIT));
+      maxPathLength = Math.max(1, Math.min(maxPathLength, HARD_PATH_LENGTH_LIMIT));
+      maxTraversalStates = Math.max(1, Math.min(maxTraversalStates, HARD_STATE_LIMIT));
+      timeBudgetMillis = Math.max(1, Math.min(timeBudgetMillis, HARD_TIME_LIMIT_MS));
+      cancelled = cancelled == null ? () -> false : cancelled;
     }
-
-    public static List<EnumeratedPath> enumerate(Node startNode) {
-        List<EnumeratedPath> results = new ArrayList<>();
-        if (startNode == null) return results;
-
-        Map<String, Integer> visitCountsOnCurrentStack = new HashMap<>();
-
-        dfsBounded(
-            startNode,
-            new ArrayList<>(),
-            new ArrayList<>(),
-            visitCountsOnCurrentStack,
-            results
-        );
-
-        return results;
-    }
-
-    private static void dfsBounded(
-            Node current,
-            List<String> pathNodes,
-            List<String> pathEdges,
-            Map<String, Integer> visitCounts,
-            List<EnumeratedPath> results) {
-
-        // Hard stop if paths hit safety limits
-        if (results.size() >= PATH_COUNT_HARD_LIMIT) {
-            return;
+    public static Options defaults() { return new Options(DEFAULT_PATH_LIMIT, DEFAULT_PATH_LENGTH_LIMIT,
+        DEFAULT_STATE_LIMIT, DEFAULT_TIME_LIMIT_MS, () -> false); }
+  }
+  public static final class EnumeratedPath {
+    public final List<String> nodeIds; public final List<String> edgeLabels;
+    public EnumeratedPath(List<String> nodes, List<String> edges) { nodeIds=List.copyOf(nodes); edgeLabels=List.copyOf(edges); }
+    public String toPathString() { StringBuilder out=new StringBuilder(); for(int i=0;i<nodeIds.size();i++){
+      out.append(nodeIds.get(i)); if(i<edgeLabels.size())out.append(" --(").append(edgeLabels.get(i)).append(")--> ");} return out.toString(); }
+  }
+  public record EnumerationResult(List<EnumeratedPath> paths, Status status, StopReason stopReason,
+      int pathLimit, int pathLengthLimit, long traversalStateLimit, long timeLimitMillis,
+      long traversalStates, int maximumPathLength, double generationTimeMs, int componentsStarted) {
+    public boolean truncated() { return status != Status.COMPLETE; }
+  }
+  private static final class Frame { final Node node; final boolean incomingEdge; int nextEdge; boolean entered,terminal;
+    Frame(Node node,boolean incomingEdge){this.node=node;this.incomingEdge=incomingEdge;} }
+  private PathEnumerator() {}
+  public static List<EnumeratedPath> enumerate(Node startNode) {
+    return enumerate(startNode==null?List.of():List.of(startNode),Options.defaults()).paths();
+  }
+  public static EnumerationResult enumerate(List<Node> roots, Options options) {
+    long started=System.nanoTime(),states=0; int maximumLength=0,components=0;
+    List<EnumeratedPath> results=new ArrayList<>(); List<String> pathNodes=new ArrayList<>(),pathEdges=new ArrayList<>();
+    Map<String,Integer> visits=new HashMap<>(); Status status=Status.COMPLETE; StopReason reason=StopReason.NONE;
+    outer: for(Node root:roots==null?List.<Node>of():roots){
+      if(root==null)continue; if(results.size()>=options.maxPaths()){status=Status.TRUNCATED;reason=StopReason.PATH_LIMIT;break;}
+      components++; ArrayDeque<Frame> stack=new ArrayDeque<>(); stack.push(new Frame(root,false));
+      while(!stack.isEmpty()){
+        if(options.cancelled().getAsBoolean()){status=Status.CANCELLED;reason=StopReason.CANCELLED;break outer;}
+        if(elapsedMs(started)>=options.timeBudgetMillis()){status=Status.TRUNCATED;reason=StopReason.TIME_LIMIT;break outer;}
+        Frame frame=stack.peek();
+        if(!frame.entered){
+          if(states>=options.maxTraversalStates()){status=Status.TRUNCATED;reason=StopReason.TRAVERSAL_STATE_LIMIT;break outer;}
+          states++;frame.entered=true;pathNodes.add(frame.node.id.replace('_','.'));
+          int count=visits.getOrDefault(frame.node.id,0)+1;visits.put(frame.node.id,count);maximumLength=Math.max(maximumLength,pathNodes.size());
+          List<Edge> outgoing=frame.node.edges==null?List.of():frame.node.edges;
+          boolean natural=outgoing.isEmpty()||count>1;
+          if(natural||pathNodes.size()>=options.maxPathLength()){
+            results.add(new EnumeratedPath(pathNodes,pathEdges));frame.terminal=true;
+            if(!natural){status=Status.TRUNCATED;reason=StopReason.PATH_LENGTH_LIMIT;}
+          }
         }
-
-        String dotId = current.id.replace('_', '.');
-        pathNodes.add(dotId);
-        
-        // Track how many times this node appears on the current path branch
-        int currentCount = visitCounts.getOrDefault(current.id, 0) + 1;
-        visitCounts.put(current.id, currentCount);
-
-        List<Edge> edges = current.edges;
-
-        // LOOP PRUNING ENFORCEMENT: If we enter a loop block a second time (currentCount > 1), 
-        // we treat it as a leaf node and stop going deeper. This kills the OutOfMemory crash.
-        if (edges == null || edges.isEmpty() || currentCount > 1) {
-            results.add(new EnumeratedPath(pathNodes, pathEdges));
-        } else {
-            for (Edge e : edges) {
-                Node next = e.to;
-
-                pathEdges.add(e.label);
-                dfsBounded(next, pathNodes, pathEdges, visitCounts, results);
-                pathEdges.remove(pathEdges.size() - 1);
-            }
+        List<Edge> outgoing=frame.node.edges==null?List.of():frame.node.edges;
+        if(frame.terminal||frame.nextEdge>=outgoing.size()){
+          stack.pop();int count=visits.get(frame.node.id)-1;if(count==0)visits.remove(frame.node.id);else visits.put(frame.node.id,count);
+          pathNodes.remove(pathNodes.size()-1);if(frame.incomingEdge)pathEdges.remove(pathEdges.size()-1);continue;
         }
-
-        // Backtrack safely
-        visitCounts.put(current.id, currentCount - 1);
-        pathNodes.remove(pathNodes.size() - 1);
+        if(results.size()>=options.maxPaths()){status=Status.TRUNCATED;reason=StopReason.PATH_LIMIT;break outer;}
+        Edge edge=outgoing.get(frame.nextEdge++);pathEdges.add(edge.label);stack.push(new Frame(edge.to,true));
+      }
     }
+    return new EnumerationResult(List.copyOf(results),status,reason,options.maxPaths(),options.maxPathLength(),
+        options.maxTraversalStates(),options.timeBudgetMillis(),states,maximumLength,elapsedMs(started),components);
+  }
+  private static double elapsedMs(long start){return Math.round((System.nanoTime()-start)/100_000.0)/10.0;}
 }

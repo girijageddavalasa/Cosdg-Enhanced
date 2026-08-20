@@ -70,8 +70,14 @@ public class TestCaseGenerator {
             Node startNode)
             throws Exception {
 
-        List<PathEnumerator.EnumeratedPath> paths =
-                PathEnumerator.enumerate(startNode);
+        return generateAllPaths(sourceCode, dagText, startNode == null ? List.of() : List.of(startNode),
+                PathEnumerator.Options.defaults());
+    }
+
+    public static String generateAllPaths(String sourceCode, String dagText, List<Node> roots,
+                                          PathEnumerator.Options options) throws Exception {
+        PathEnumerator.EnumerationResult enumeration = PathEnumerator.enumerate(roots, options);
+        List<PathEnumerator.EnumeratedPath> paths = enumeration.paths();
 
         JsonArray allPathsArr = new JsonArray();
         int pathIndex = 1;
@@ -95,8 +101,9 @@ public class TestCaseGenerator {
             scored.add(scoredTc);
         }
 
-        List<MinCoverageSelector.ScoredTestCase> minSet =
-                MinCoverageSelector.selectMinimum(scored);
+        MinCoverageSelector.SelectionResult selection =
+                MinCoverageSelector.selectGreedy(scored, enumeration.truncated());
+        List<MinCoverageSelector.ScoredTestCase> minSet = new ArrayList<>(selection.selected());
 
         minSet.sort((a, b) -> Integer.compare(
                 b.coveredEdges.size(),
@@ -121,7 +128,20 @@ public class TestCaseGenerator {
         }
 
         JsonObject root = new JsonObject();
-        root.addProperty("total_paths", paths.size());
+        root.addProperty("paths_generated", paths.size());
+        root.addProperty("total_paths", paths.size()); // compatibility: generated count, not graph-wide total
+        root.addProperty("status", enumeration.status().name());
+        root.addProperty("truncated", enumeration.truncated());
+        root.addProperty("stop_reason", enumeration.stopReason().name());
+        root.addProperty("path_limit", enumeration.pathLimit());
+        root.addProperty("path_length_limit", enumeration.pathLengthLimit());
+        root.addProperty("traversal_state_limit", enumeration.traversalStateLimit());
+        root.addProperty("time_limit_ms", enumeration.timeLimitMillis());
+        root.addProperty("traversal_states", enumeration.traversalStates());
+        root.addProperty("maximum_path_length", enumeration.maximumPathLength());
+        root.addProperty("generation_time_ms", enumeration.generationTimeMs());
+        root.addProperty("candidate_set_approximate", selection.approximate());
+        root.addProperty("candidate_set_truncated", selection.candidatePathsTruncated());
         root.addProperty("minimum_test_cases_for_max_coverage", minSet.size());
         root.add("all_paths", allPathsArr);
         root.add("minimum_test_suite", minSuiteArr);

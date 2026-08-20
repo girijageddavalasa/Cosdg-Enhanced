@@ -1,2 +1,2 @@
 # Cosdg-Enhanced
-dag built using mermaid + java + antlr
+graph built using mermaid + java + antlr

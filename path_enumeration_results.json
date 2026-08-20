@@ -1,0 +1,79 @@
+[
+  {
+    "program": "sequential",
+    "pathsGenerated": 1,
+    "generationTimeMs": 0.0,
+    "approximateHeapIncreaseBytes": 0,
+    "maximumPathLength": 20,
+    "truncated": false,
+    "status": "COMPLETE",
+    "stopReason": "NONE",
+    "traversalStates": 20
+  },
+  {
+    "program": "branch-heavy",
+    "pathsGenerated": 500,
+    "generationTimeMs": 1.8,
+    "approximateHeapIncreaseBytes": 0,
+    "maximumPathLength": 13,
+    "truncated": true,
+    "status": "TRUNCATED",
+    "stopReason": "PATH_LIMIT",
+    "traversalStates": 1004
+  },
+  {
+    "program": "nested-branches",
+    "pathsGenerated": 256,
+    "generationTimeMs": 0.7,
+    "approximateHeapIncreaseBytes": 1048576,
+    "maximumPathLength": 9,
+    "truncated": false,
+    "status": "COMPLETE",
+    "stopReason": "NONE",
+    "traversalStates": 511
+  },
+  {
+    "program": "loop",
+    "pathsGenerated": 2,
+    "generationTimeMs": 0.0,
+    "approximateHeapIncreaseBytes": 0,
+    "maximumPathLength": 2,
+    "truncated": false,
+    "status": "COMPLETE",
+    "stopReason": "NONE",
+    "traversalStates": 3
+  },
+  {
+    "program": "nested-loops",
+    "pathsGenerated": 3,
+    "generationTimeMs": 0.0,
+    "approximateHeapIncreaseBytes": 0,
+    "maximumPathLength": 3,
+    "truncated": false,
+    "status": "COMPLETE",
+    "stopReason": "NONE",
+    "traversalStates": 5
+  },
+  {
+    "program": "1000-statements",
+    "pathsGenerated": 100,
+    "generationTimeMs": 0.2,
+    "approximateHeapIncreaseBytes": 0,
+    "maximumPathLength": 15,
+    "truncated": true,
+    "status": "TRUNCATED",
+    "stopReason": "PATH_LIMIT",
+    "traversalStates": 214
+  },
+  {
+    "program": "5000-statements",
+    "pathsGenerated": 100,
+    "generationTimeMs": 17.3,
+    "approximateHeapIncreaseBytes": 0,
+    "maximumPathLength": 23,
+    "truncated": true,
+    "status": "TRUNCATED",
+    "stopReason": "PATH_LIMIT",
+    "traversalStates": 608
+  }
+]

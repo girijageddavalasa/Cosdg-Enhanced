@@ -14,6 +14,24 @@ public class DAGBuilder {
 
   private int exceptionEdgeCount = 1;
 
+  private int classMemberEdgeCount = 1;
+
+  private int dataEdgeCount = 1;
+
+  private int inheritanceEdgeCount = 1;
+
+  private int methodCallEdgeCount = 1;
+
+  private int parameterEdgeCount = 1;
+
+  private int summaryEdgeCount = 1;
+
+  private String programScope = "program";
+  private String sourceFile;
+  private String currentClassId;
+  private String currentMethodId;
+  private int currentSourceLine = -1;
+
   // ============================================================
   // ALL NODES AND EDGES (for coverage computation)
   // ============================================================
@@ -41,9 +59,42 @@ public class DAGBuilder {
 
   public Node createNode(String type) {
 
+    return createNode(type, null);
+  }
+
+  public Node createNode(String type, String detail) {
+
     String formalId;
 
     switch (type) {
+
+      case "CLASS_ENTRY":
+        formalId = String.format("ve1.%02d", nodeCount++);
+        break;
+
+      case "METHOD_ENTRY":
+        formalId = String.format("ve2.%02d", nodeCount++);
+        break;
+
+      case "CALL":
+        formalId = String.format("vs2.%02d", nodeCount++);
+        break;
+
+      case "FORMAL_IN":
+        formalId = String.format("vp1.%02d", nodeCount++);
+        break;
+
+      case "FORMAL_OUT":
+        formalId = String.format("vp2.%02d", nodeCount++);
+        break;
+
+      case "ACTUAL_IN":
+        formalId = String.format("vp3.%02d", nodeCount++);
+        break;
+
+      case "ACTUAL_OUT":
+        formalId = String.format("vp4.%02d", nodeCount++);
+        break;
 
       case "TRY_BLOCK_START":
 
@@ -59,13 +110,6 @@ public class DAGBuilder {
             nodeCount++);
         break;
 
-      case "FINALLY_START":
-
-        formalId = String.format(
-            "vx3.%02d",
-            nodeCount++);
-        break;
-
       default:
 
         formalId = String.format(
@@ -78,7 +122,9 @@ public class DAGBuilder {
 
         formalId.replace('.', '_'),
 
-        formalId + "<br/>" + type);
+        formalId + "<br/>" + type + (detail == null || detail.isBlank() ? "" : "<br/>[" + detail + "]"));
+
+    applyOwnership(node);
 
     allNodesList.add(node);
 
@@ -101,6 +147,8 @@ public class DAGBuilder {
 
         formalId + "<br/>" + type + "<br/>[" + exceptionType + "]");
 
+    applyOwnership(node);
+
     allNodesList.add(node);
 
     return node;
@@ -118,6 +166,36 @@ public class DAGBuilder {
     return allEdgesList;
   }
 
+  public void setGraphScope(String program, String file) {
+    if (program != null && !program.isBlank()) this.programScope = program;
+    this.sourceFile = file;
+  }
+
+  public String getProgramScope() { return programScope; }
+
+  public String getSourceFile() { return sourceFile; }
+
+  public void setSourceFile(String file) { this.sourceFile = file; }
+
+  public void setOwnershipContext(String classId, String methodId) {
+    this.currentClassId = classId;
+    this.currentMethodId = methodId;
+  }
+
+  public void setCurrentSourceLine(int line) { this.currentSourceLine = line; }
+
+  public void annotate(Node node, String classId, String methodId, int line) {
+    node.program = programScope;
+    node.sourceFile = sourceFile;
+    node.classId = classId;
+    node.methodId = methodId;
+    node.sourceLine = line;
+  }
+
+  private void applyOwnership(Node node) {
+    annotate(node, currentClassId, currentMethodId, currentSourceLine);
+  }
+
   // ============================================================
   // EDGE CONNECTION
   // ============================================================
@@ -127,28 +205,104 @@ public class DAGBuilder {
       Node to,
       String label) {
 
+    connect(from, to, label, null);
+  }
+
+  public void connect(
+      Node from,
+      Node to,
+      String relationship,
+      String branch) {
+
     String edgeLabel;
 
-    if (label.equalsIgnoreCase("exception")) {
+    String edgeType;
+
+    if (relationship.equalsIgnoreCase("exception")
+        || relationship.equalsIgnoreCase("exception_throw")) {
 
       edgeLabel = String.format(
-          "ex.%02d",
+          "ee1.%02d",
           exceptionEdgeCount++);
+
+      edgeType = "EXCEPTION_THROW";
+
+    } else if (relationship.equalsIgnoreCase("exception_catch")) {
+
+      edgeLabel = String.format("ee2.%02d", exceptionEdgeCount++);
+      edgeType = "EXCEPTION_CATCH";
+
+    } else if (relationship.equalsIgnoreCase("class_member")) {
+
+      edgeLabel = String.format("eb.%02d", classMemberEdgeCount++);
+      edgeType = "CLASS_MEMBER";
+
+    } else if (relationship.equalsIgnoreCase("data")) {
+
+      edgeLabel = String.format("ed.%02d", dataEdgeCount++);
+      edgeType = "DATA_DEPENDENCE";
+
+    } else if (relationship.equalsIgnoreCase("inheritance")) {
+
+      edgeLabel = String.format("ei.%02d", inheritanceEdgeCount++);
+      edgeType = "INHERITANCE";
+
+    } else if (relationship.equalsIgnoreCase("simple_call")) {
+
+      edgeLabel = String.format("em1.%02d", methodCallEdgeCount++);
+      edgeType = "SIMPLE_METHOD_CALL";
+
+    } else if (relationship.equalsIgnoreCase("inherited_call")) {
+
+      edgeLabel = String.format("em2.%02d", methodCallEdgeCount++);
+      edgeType = "INHERITED_METHOD_CALL";
+
+    } else if (relationship.equalsIgnoreCase("polymorphic_call")) {
+
+      edgeLabel = String.format("em3.%02d", methodCallEdgeCount++);
+      edgeType = "POLYMORPHIC_METHOD_CALL";
+
+    } else if (relationship.equalsIgnoreCase("parameter_in")) {
+
+      edgeLabel = String.format("ep1.%02d", parameterEdgeCount++);
+      edgeType = "PARAMETER_IN";
+
+    } else if (relationship.equalsIgnoreCase("parameter_out")) {
+
+      edgeLabel = String.format("ep2.%02d", parameterEdgeCount++);
+      edgeType = "PARAMETER_OUT";
+
+    } else if (relationship.equalsIgnoreCase("summary")) {
+
+      edgeLabel = String.format("es.%02d", summaryEdgeCount++);
+      edgeType = "SUMMARY";
 
     } else {
 
       edgeLabel = String.format(
           "ec.%02d",
           controlEdgeCount++);
+
+      edgeType = "CONTROL_DEPENDENCE";
     }
 
-    from.addEdge(
-        to,
-        edgeLabel);
+    Edge edge = from.addEdge(to, edgeLabel, edgeType, branch);
+    allEdgesList.add(edge);
+  }
 
-    // Track for coverage analysis
-    allEdgesList.add(
-        new com.example.dag.graph.Edge(from, to, edgeLabel));
+  public void connectInheritance(Node child, Node parent, List<String> visibleMethods) {
+    connect(child, parent, "inheritance");
+    allEdgesList.get(allEdgesList.size() - 1).tags.addAll(visibleMethods);
+  }
+
+  public void connectExceptionThrow(Node throwNode, Node catchNode, String exceptionType) {
+    connect(throwNode, catchNode, "exception_throw");
+    allEdgesList.get(allEdgesList.size() - 1).exceptionType = exceptionType;
+  }
+
+  public void connectExceptionCatch(Node tryNode, Node catchNode, String caughtTypes) {
+    connect(tryNode, catchNode, "exception_catch");
+    allEdgesList.get(allEdgesList.size() - 1).exceptionType = caughtTypes;
   }
 
   // ============================================================

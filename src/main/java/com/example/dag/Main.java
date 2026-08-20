@@ -1,149 +1,25 @@
 package com.example.dag;
 
-import org.antlr.v4.runtime.*;
-import org.antlr.v4.runtime.tree.*;
-
-// EXPLICIT IMPORTS ADDED HERE TO FIX UNRESOLVED COMPILATION PROBLEMS
-import com.example.dag.visitor.ExceptionVisitor;
-import com.example.dag.graph.Node;
-import com.example.dag.graph.Edge;
-import com.example.dag.testcase.VariableExtractor;
 import com.example.dag.server.ApiServer;
+import com.example.dag.server.GraphWorkspace;
+import com.example.dag.server.GraphWorkspace.SourceFile;
 
-import java.util.List;
-import java.util.Map;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
+import java.util.List;
 
-public class Main {
+public final class Main {
+  private Main() {}
 
-  public static void main(String[] args)
-      throws Exception {
-
-    // ====================================================
-    // READ SOURCE CODE
-    // ====================================================
-
-    String codePath = args.length > 0 ? args[0] : "input_code.txt";
-
-    // Dynamic fallback guard if the requested file layout varies across paths
-    if (!Files.exists(Paths.get(codePath)) && Files.exists(Paths.get("code.txt"))) {
-        codePath = "code.txt";
-    }
-
-    String code = Files.readString(Paths.get(codePath));
-
-    // ====================================================
-    // PARSER SETUP
-    // ====================================================
-
-    CharStream input = CharStreams.fromString(code);
-
-    JavaLexer lexer = new JavaLexer(input);
-
-    CommonTokenStream tokens = new CommonTokenStream(lexer);
-
-    JavaParser parser = new JavaParser(tokens);
-
-    ParseTree tree = parser.compilationUnit();
-
-    // ====================================================
-    // BUILD DAG
-    // ====================================================
-
-    System.out.println(
-        "\n--- Extended COSDG DAG Builder ---");
-
-    DAGBuilder builder = new DAGBuilder();
-
-    ExceptionVisitor visitor = new ExceptionVisitor(
-        builder,
-        null);
-
-    visitor.visit(tree);
-
-    Node startNode = visitor.getStartNode();
-
-    // ====================================================
-    // PRINT DAG
-    // ====================================================
-
-    System.out.println(
-        "\n--- DAG Output ---");
-
-    builder.printGraph(startNode);
-
-    // ====================================================
-    // EXPORT DAG TEXT
-    // ====================================================
-
-    String dagText = builder.exportAsText(startNode);
-
-    System.out.println(
-        "\n--- DAG TEXT ---");
-
-    System.out.println(dagText);
-
-    // ====================================================
-    // VARIABLE EXTRACTION
-    // ====================================================
-
-    System.out.println(
-        "\n--- Extracted Variables ---");
-
-    // Explicitly typed as List<Map<String, String>> to solve unresolved Object errors
-    List<Map<String, String>> variables = VariableExtractor.extract(code);
-
-    for (Map<String, String> v : variables) {
-
-      System.out.println(
-          v.get("type")
-              + " "
-              + v.get("name"));
-    }
-
-    // ====================================================
-    // EXPORT FULL UI (no AI call at startup)
-    // ====================================================
-
-    builder.exportAsHtml(
-        startNode,
-        "visual_graph.html",
-        variables,
-        "");
-
-    // ====================================================
-    // GET ALL NODES AND EDGES FOR COVERAGE
-    // ====================================================
-
-    List<Node> allNodes = builder.getAllNodes();
-
-    List<Edge> allEdges = builder.getAllEdges();
-
-    System.out.println(
-        "\n--- Graph Stats ---");
-
-    System.out.println(
-        "Total nodes: " + allNodes.size());
-
-    System.out.println(
-        "Total edges: " + allEdges.size());
-
-    // ====================================================
-    // START API SERVER
-    // ====================================================
-
-    ApiServer.start(
-        code,
-        dagText,
-        startNode,
-        allNodes,
-        allEdges);
-
-    System.out.println(
-        "\n--- AI Testing Platform Ready ---");
-
-    System.out.println(
-        "Open: http://localhost:8080");
+  public static void main(String[] args) throws Exception {
+    Path sourcePath = Path.of(args.length > 0 ? args[0] : "input_code.txt");
+    if (!Files.exists(sourcePath) && Files.exists(Path.of("code.txt"))) sourcePath = Path.of("code.txt");
+    sourcePath = sourcePath.toAbsolutePath().normalize();
+    GraphWorkspace workspace = new GraphWorkspace(List.of(
+        new SourceFile(sourcePath.getFileName().toString(), Files.readString(sourcePath))));
+    GraphWorkspace.Statistics stats = workspace.current().statistics();
+    System.out.printf("COSDG/ACSD ready: %,d statements, %,d nodes, %,d edges%n",
+        stats.statements(), stats.nodes(), stats.edges());
+    ApiServer.start(workspace);
   }
 }

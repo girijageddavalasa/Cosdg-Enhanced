@@ -1,511 +1,72 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exception DAG Visualization</title>
-
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-        mermaid.initialize({
-            startOnLoad: true,
-            theme: 'default'
-        });
-    </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f0f2f5;
-            margin: 0;
-            padding: 0;
-        }
-
-        .layout {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        .sidebar {
-            width: 420px;
-            min-width: 320px;
-            background: white;
-            border-right: 1px solid #e0e0e0;
-            padding: 20px;
-            overflow-y: auto;
-            position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            z-index: 10;
-        }
-
-        .main-graph {
-            margin-left: 420px;
-            width: calc(100vw - 420px);
-            height: 100vh;
-            overflow: auto;
-            padding: 20px;
-            background: #f0f2f5;
-        }
-
-        .sidebar h2 {
-            font-size: 15px;
-            color: #1d9e75;
-            margin: 0 0 16px 0;
-            font-weight: 700;
-        }
-
-        .section-title {
-            font-size: 12px;
-            font-weight: 700;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin: 16px 0 8px 0;
-        }
-
-        .input-group {
-            margin-bottom: 10px;
-        }
-
-        .input-group label {
-            display: block;
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 3px;
-        }
-
-        .input-group input {
-            width: 100%;
-            padding: 7px 10px;
-            border-radius: 6px;
-            border: 1px solid #d0d0d0;
-            font-size: 12px;
-            outline: none;
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 9px 16px;
-            border: none;
-            border-radius: 7px;
-            background: #1d9e75;
-            color: white;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            margin-right: 8px;
-            margin-bottom: 8px;
-        }
-
-        .btn:hover { background: #178a65; }
-        .btn-sm { padding: 5px 12px; font-size: 11px; margin-top: 8px; margin-right: 0; }
-        .loading { color: #888; font-size: 12px; padding: 8px 0; display: none; }
-
-        .tc-card {
-            background: #fafafa;
-            border: 1px solid #e8e8e8;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 10px;
-        }
-
-        .tc-header { font-size: 12px; font-weight: 700; color: #222; margin-bottom: 6px; }
-        .tc-field { font-size: 11px; color: #444; margin-bottom: 4px; line-height: 1.5; }
-        .tc-field strong { color: #222; }
-        .tc-field code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 10px; white-space: pre-wrap; word-break: break-all; }
-        .tc-badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 700; margin-right: 6px; }
-        
-        .badge-normal { background: #e4f7ef; color: #0c6c52; }
-        .badge-exception { background: #fde8e8; color: #c0392b; }
-        .badge-edge { background: #fef6e4; color: #7d5a00; }
-        .badge-min { background: #f3e5f5; color: #6a1b9a; }
-
-        .path-tag { font-size: 10px; background: #f0f0f0; border-radius: 4px; padding: 2px 5px; margin-right: 3px; display: inline-block; }
-        .path-tag-visited { background: #c8f7e4; color: #0a5c42; }
-        .summary-box { background: #f0faf6; border: 1px solid #b2dfdb; border-radius: 7px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; }
-
-        .coverage-sticky-header {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-            width: 100%;
-            max-width: 1200px;
-        }
-
-        .cov-section-title {
-            font-size: 11px;
-            font-weight: 800;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin: 12px 0 6px 0;
-            border-bottom: 1px dashed #eee;
-            padding-bottom: 3px;
-        }
-
-        .cov-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-            margin-bottom: 10px;
-        }
-
-        .cov-card {
-            background: #fafafa;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 12px;
-        }
-
-        .cov-label { font-size: 11px; font-weight: 700; color: #555; margin-bottom: 4px; }
-        .cov-value { font-size: 24px; font-weight: 800; color: #1d9e75; }
-        .cov-desc { font-size: 10px; color: #999; margin-top: 2px; }
-        .cov-overall-bar { display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #ddd; padding-top: 10px; margin-top: 12px; }
-        .cov-overall { font-size: 15px; font-weight: 800; color: #222; }
-        .cov-overall span { color: #1d9e75; font-size: 18px; }
-        .track-result { margin-top: 6px; font-size: 11px; }
-
-        .graph-card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-            overflow: auto;
-            width: max-content;
-            min-width: 2600px;
-            min-height: 2200px;
-        }
-
-        .graph-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 16px; }
-        .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
-        .mermaid { width: max-content !important; height: max-content !important; overflow: visible !important; }
-        .mermaid svg { width: 2400px !important; height: 2200px !important; max-width: none !important; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>COSDG/ACSD Explorer</title>
+  <style>
+    :root{font-family:Inter,Segoe UI,sans-serif;color:#17202a;background:#eef2f5}*{box-sizing:border-box}
+    body{margin:0}.top{height:58px;background:#12372f;color:#fff;display:flex;align-items:center;padding:0 22px;gap:16px}.top h1{font-size:17px;margin:0}.top .spacer{flex:1}
+    button,.button,select,input{font:inherit;border:1px solid #c9d2d8;border-radius:6px;padding:7px 9px;background:#fff}.button,button{cursor:pointer}.primary{background:#1d8067;color:#fff;border-color:#1d8067}.download{color:#fff;text-decoration:none;background:#316b9a;padding:8px 12px;border-radius:6px;font-size:12px}
+    .layout{display:grid;grid-template-columns:330px minmax(0,1fr);height:calc(100vh - 58px)}aside{background:#fff;border-right:1px solid #dbe2e6;overflow:auto;padding:14px}.main{overflow:auto;padding:16px}.card{background:#fff;border:1px solid #dce3e7;border-radius:10px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px #0000000a}
+    h2{font-size:13px;margin:0 0 10px;color:#37645a;text-transform:uppercase;letter-spacing:.04em}label{display:block;font-size:11px;color:#607078;margin:8px 0 4px}.row{display:flex;gap:7px;align-items:center}.row>*{min-width:0}.grow{flex:1}.muted{color:#718087;font-size:11px}.error{color:#b42318}.notice{background:#fff4ce;border:1px solid #e7ca72;padding:9px;border-radius:7px;font-size:12px;margin-bottom:10px;display:none}
+    .stats{display:grid;grid-template-columns:repeat(6,minmax(90px,1fr));gap:8px}.stat{background:#f6f9f8;border-radius:7px;padding:9px}.stat b{display:block;font-size:17px}.stat span{font-size:10px;color:#65736f}.measured,.theory{margin-top:10px;display:flex;gap:18px;flex-wrap:wrap;font-size:12px}.theory{border-top:1px solid #e4e9e7;padding-top:9px}.badge{background:#e1f2ed;color:#17634f;padding:3px 7px;border-radius:10px;font-size:10px}
+    .coverage-table{width:100%;border-collapse:collapse;font-size:12px}.coverage-table th,.coverage-table td{padding:7px;border-bottom:1px solid #e8eceb;text-align:right}.coverage-table th:first-child,.coverage-table td:first-child{text-align:left}.coverage-table tbody tr{cursor:pointer}.coverage-table tbody tr:hover{background:#f1f7f5}.formula{margin-top:9px;padding:9px;background:#f5f7fa;border-radius:6px;font-size:11px}.warning{color:#8a5700}
+    .tree button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px;font-size:12px}.tree button:hover,.tree button.active{background:#e7f4f0}.method{padding-left:20px!important}.file-label{font-size:10px;color:#87938f;padding:8px 7px 2px;overflow:hidden;text-overflow:ellipsis}
+    #source{height:260px;overflow:auto;margin:0;background:#17202a;color:#dce8e4;padding:13px;border-radius:7px;font:12px/1.55 Consolas,monospace;white-space:pre;tab-size:2}.graph-wrap{min-height:420px;overflow:auto;background:#fbfcfc;border:1px solid #e2e7e6;border-radius:8px;padding:12px}.mermaid svg{max-width:none}.controls{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:8px;margin-bottom:10px}.controls label{margin:0}.controls input,.controls select{width:100%;margin-top:4px}.empty{padding:80px 20px;text-align:center;color:#73827e}
+    @media(max-width:1000px){.layout{grid-template-columns:260px minmax(0,1fr)}.stats{grid-template-columns:repeat(3,1fr)}.controls{grid-template-columns:repeat(3,1fr)}}
+  </style>
 </head>
-
 <body>
-
-    <div class="layout">
-        <div class="sidebar">
-            <h2>DAG Analysis Panel</h2>
-            <div class="section-title">Extracted Variables</div>
-            VARIABLE_INPUTS
-
-            <hr class="divider">
-            <div class="section-title">Actions</div>
-            <button class="btn" onclick="generateTests()">Generate Test Cases</button>
-            <button class="btn" onclick="getAllPaths()">Get All Possible Test Cases</button>
-
-            <hr class="divider">
-            <div class="section-title">AI Generated Testcases</div>
-            <div id="tc-loading" class="loading">Generating... please wait</div>
-            <div id="tc-display"></div>
-
-            <div id="paths-section" style="display:none">
-                <hr class="divider">
-                <div class="section-title">All Paths & Minimum Test Suite</div>
-                <div id="paths-loading" class="loading">Analysing paths... please wait</div>
-                <div id="paths-display"></div>
-            </div>
+  <header class="top"><h1>COSDG / ACSD Graph Explorer</h1><span class="badge">bounded visualization</span><span class="spacer"></span><a class="download" href="/api/export" download>Download complete canonical JSON</a></header>
+  <div class="layout">
+    <aside>
+      <section class="card"><h2>Java source</h2><input id="files" type="file" accept=".java,text/x-java-source" multiple style="width:100%"><div class="row"><label class="grow">Worker threads<select id="workers" style="width:100%"><option>1</option><option>2</option><option selected>4</option><option>8</option></select></label><label class="grow"><input id="baseline" type="checkbox" checked> Measure serial baseline</label></div><button class="primary" id="submit" style="width:100%;margin-top:8px">Build graph</button><div id="submit-status" class="muted" style="margin-top:7px"></div></section>
+      <section class="card"><h2>Program hierarchy</h2><button id="program" style="width:100%;text-align:left">▣ Program overview</button><div id="tree" class="tree"></div></section>
+    </aside>
+    <main class="main">
+      <section class="card"><h2>Program statistics</h2><div id="stats" class="stats"></div><div id="measured" class="measured"></div><div id="theory" class="theory"></div></section>
+      <section class="card"><div class="row"><h2 class="grow">Execution</h2><button id="new-session">New session</button><button id="reset-session">Reset session</button></div><div class="row"><input id="main-class" class="grow" placeholder="Main class (for example Test)"><input id="runtime-args" class="grow" placeholder="Arguments separated by spaces"><input id="test-name" value="runtime-test" placeholder="Test case"><input id="timeout" type="number" min="100" max="30000" value="5000" title="Timeout (ms)"><button class="primary" id="execute">Compile &amp; run</button></div><div id="execution-status" class="measured"><span>Status: not run</span></div><div id="session-status" class="formula muted">No runtime coverage session.</div><div class="muted warning">Uploaded Java is executed only in a bounded child JVM. Production deployment still requires OS/container sandboxing.</div></section>
+      <section class="card"><div class="row"><h2 class="grow">Coverage analysis</h2><span class="badge" id="coverage-source">Static predicted</span></div><div class="muted warning" id="coverage-limit"></div><table class="coverage-table"><thead><tr><th>Metric</th><th>Covered</th><th>Total</th><th>Coverage</th><th>Source</th><th>Static</th></tr></thead><tbody id="coverage-body"></tbody></table><div id="coverage-formula" class="formula muted">Select a metric to view its formula and provenance.</div></section>
+      <section class="card"><div class="row"><h2 class="grow">Static path enumeration</h2><span class="badge">Separate from runtime coverage</span></div><div class="row"><input id="path-limit" type="number" value="5000" min="1" title="Path limit"><input id="path-length" type="number" value="1000" min="1" title="Path length limit"><input id="state-limit" type="number" value="250000" min="1" title="Traversal-state limit"><input id="path-time" type="number" value="2000" min="1" title="Time limit (ms)"><button id="enumerate-paths">Enumerate bounded paths</button></div><div id="path-status" class="formula muted">Paths are generated only on request; path candidates are not runtime coverage.</div></section>
+      <section class="card"><div class="row"><h2 class="grow">Submitted source</h2><select id="source-file"></select></div><pre id="source"></pre></section>
+      <section class="card">
+        <div class="row"><h2 class="grow">Graph projection</h2><span class="muted">The visualization is bounded; canonical export is always complete.</span></div>
+        <div class="controls">
+          <label>Node ID search<input id="node-id" placeholder="vs1_10"></label>
+          <label>Node type<input id="node-type" placeholder="CALL"></label>
+          <label>Edge type<select id="edge-type"><option value="">All edge types</option><option>CONTROL_DEPENDENCE</option><option>DATA_DEPENDENCE</option><option>CLASS_MEMBER</option><option>INHERITANCE</option><option>SIMPLE_METHOD_CALL</option><option>INHERITED_METHOD_CALL</option><option>POLYMORPHIC_METHOD_CALL</option><option>PARAMETER_IN</option><option>PARAMETER_OUT</option><option>SUMMARY</option><option>EXCEPTION_THROW</option><option>EXCEPTION_CATCH</option></select></label>
+          <label>Node limit<input id="limit" type="number" min="1" max="500" value="250"></label>
+          <label>Edge limit<input id="edge-limit" type="number" min="1" max="1500" value="750"></label>
+          <label>Neighborhood depth<input id="depth" type="number" min="1" max="3" value="1"></label>
         </div>
-
-        <div class="main-graph">
-            <div class="coverage-sticky-header">
-                <div class="section-title" style="margin-top: 0; margin-bottom: 12px; color: #1d9e75; font-size: 14px;">Live Cumulative Coverage Engine</div>
-                
-                <div class="cov-section-title">Cosdg Call Coverage</div>
-                <div class="cov-grid">
-                    <div class="cov-card">
-                        <div class="cov-label">Method Coverage (Covmd)</div>
-                        <div class="cov-value" id="cov-covmd">0%</div>
-                        <div class="cov-desc">Methods executed / total</div>
-                    </div>
-                    <div class="cov-card">
-                        <div class="cov-label">Polymorphic (Covpc)</div>
-                        <div class="cov-value" id="cov-covpc">0%</div>
-                        <div class="cov-desc">Polymorphic edges covered</div>
-                    </div>
-                    <div class="cov-card">
-                        <div class="cov-label">Inheritance (Covic)</div>
-                        <div class="cov-value" id="cov-covic">0%</div>
-                        <div class="cov-desc">Inherited methods exercised</div>
-                    </div>
-                    <div class="cov-card">
-                        <div class="cov-label">Total Call (Covmc)</div>
-                        <div class="cov-value" id="cov-covmc">0%</div>
-                        <div class="cov-desc">All call edges covered</div>
-                    </div>
-                </div>
-
-                <div class="cov-section-title" style="color: #d97706;">Exception Flow Coverage</div>
-                <div class="cov-grid">
-                    <div class="cov-card">
-                        <div class="cov-label">Throw Coverage (Covet)</div>
-                        <div class="cov-value" id="cov-covet" style="color: #d97706;">0%</div>
-                        <div class="cov-desc">Control dependencies hit</div>
-                    </div>
-                    <div class="cov-card">
-                        <div class="cov-label">Catch Coverage (Covec)</div>
-                        <div class="cov-value" id="cov-covec" style="color: #d97706;">0%</div>
-                        <div class="cov-desc">Catch clauses handled</div>
-                    </div>
-                    <div class="cov-card">
-                        <div class="cov-label">Exception Type (Covety)</div>
-                        <div class="cov-value" id="cov-covety" style="color: #d97706;">0%</div>
-                        <div class="cov-desc">Unique exception types hit</div>
-                    </div>
-                    <div class="cov-card">
-                        <div class="cov-label">Exception Flow (Covef)</div>
-                        <div class="cov-value" id="cov-covef" style="color: #d97706;">0%</div>
-                        <div class="cov-desc">Traversed flow paths</div>
-                    </div>
-                </div>
-
-                <div class="cov-overall-bar">
-                    <div style="font-size: 11px; color: #777;" id="active-tc-label">No target trace path actively focused.</div>
-                    <div class="cov-overall">
-                        Cumulative Suite Progress: <span id="cov-overall">0%</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="graph-card">
-                <div class="graph-title">Extended COSDG - Exception Flow DAG</div>
-                <div class="mermaid">
-                    MERMAID_CONTENT
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const API = 'http://localhost:8080';
-
-        function extractJson(raw) {
-            if (!raw || raw.trim() === '') return null;
-            try { return JSON.parse(raw); } catch (e) {
-                const s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
-                if (s !== -1 && e2 !== -1) {
-                    try { return JSON.parse(raw.substring(s, e2 + 1)); } catch (err) {}
-                }
-                return null;
-            }
-        }
-
-        let tcCardCounter = 0;
-
-        function renderTcCard(tc, badgeClass, badgeLabel) {
-            const cardId = tc.id || 'tc' + (++tcCardCounter);
-            const inputObj = tc.input || {};
-            const inputDisplay = JSON.stringify(inputObj, null, 2);
-            const expected = Array.isArray(tc.expected_output) ? tc.expected_output.join(', ') : (tc.expected_output || 'N/A');
-
-            let parsedPath = [];
-            if (Array.isArray(tc.dag_path)) parsedPath = tc.dag_path;
-            else if (typeof tc.dag_path === 'string') {
-                parsedPath = tc.dag_path.match(/(?:vs|vx|ec|ex)\d+\.\d+/g) || [];
-            }
-
-            const path = parsedPath.length > 0 ? parsedPath.map(n => '<span class="path-tag">' + n + '</span>').join('') : '';
-            const excType = tc.exception_type ? '<div class="tc-field"><strong>Exception:</strong> ' + tc.exception_type + '</div>' : '';
-
-            const edgeTagsDisplay = tc.dag_edges && tc.dag_edges.length > 0
-                ? `<div class="tc-field"><strong>DAG Edges:</strong> ${tc.dag_edges.map(eg => `<span class="path-tag" style="background:#fff3e0; color:#e65100;">${eg}</span>`).join('')}</div>`
-                : '';
-
-            return `
-            <div class="tc-card">
-                <div class="tc-header">
-                    <span class="tc-badge ${badgeClass}">${badgeLabel}</span>
-                    ${cardId} - ${tc.description || ''}
-                </div>
-                <div class="tc-field"><strong>Input:</strong> <code>${inputDisplay}</code></div>
-                <div class="tc-field"><strong>Expected:</strong> ${expected}</div>
-                ${excType}
-                ${path ? `<div class="tc-field"><strong>DAG Path:</strong> ${path}</div>` : ''}
-                ${edgeTagsDisplay}
-                <button class="btn btn-sm" onclick='trackTestCase("${cardId}", ${JSON.stringify(parsedPath)}, ${JSON.stringify(tc.dag_edges || [])})'>
-                    Track This
-                </button>
-                <div id="track-result-${cardId}" class="track-result"></div>
-            </div>`;
-        }
-
-        function trackTestCase(cardId, visitedNodes, visitedEdges) {
-            const resultDiv = document.getElementById('track-result-' + cardId);
-            const visited = visitedNodes || [];
-            const edges = visitedEdges || [];
-
-            fetch(API + '/track-coverage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: cardId, dag_path: visited, dag_edges: edges })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.coverage) {
-                    document.getElementById('cov-covmd').innerText = data.coverage.covmd + '%';
-                    document.getElementById('cov-covpc').innerText = data.coverage.covpc + '%';
-                    document.getElementById('cov-covic').innerText = data.coverage.covic + '%';
-                    document.getElementById('cov-covmc').innerText = data.coverage.covmc + '%';
-                    
-                    document.getElementById('cov-covet').innerText = data.coverage.covet + '%';
-                    document.getElementById('cov-covec').innerText = data.coverage.covec + '%';
-                    document.getElementById('cov-covety').innerText = data.coverage.covety + '%';
-                    document.getElementById('cov-covef').innerText = data.coverage.covef + '%';
-                    
-                    document.getElementById('cov-overall').innerText = data.coverage.overall + '%';
-                    
-                    if (cardId === "COMBINED_MIN_SUITE") {
-                        document.getElementById('active-tc-label').innerHTML = `Tracking accumulated metrics for the <strong>Entire Minimized Optimization Suite</strong>.`;
-                    } else {
-                        document.getElementById('active-tc-label').innerHTML = `Currently tracking metric contributions for: <strong>${cardId}</strong>`;
-                    }
-                }
-            })
-            .catch(err => { console.error("Error updates logic pipeline context boundary:", err); });
-
-            // Reset nodes style
-            document.querySelectorAll('.mermaid svg g.node rect, .mermaid svg g.node circle, .mermaid svg g.node polygon, .mermaid svg g.node path').forEach(el => {
-                el.style.fill = '#fde8e8'; 
-                el.style.stroke = '#e24b4a'; 
-                el.style.strokeWidth = '1px'; 
-                el.style.filter = '';
-            });
-
-            // Reset edge lines style
-            document.querySelectorAll('.mermaid svg .edgePath path.path').forEach(pathLine => {
-                pathLine.style.stroke = '#d9534f'; 
-                pathLine.style.strokeWidth = '1.5px'; 
-                pathLine.style.filter = '';
-            });
-
-            // Highlight visited nodes
-            document.querySelectorAll('.mermaid svg g.node').forEach(nodeEl => {
-                const fullText = nodeEl.textContent || '';
-                const match = fullText.match(/(?:vs|vx|ec|ex)\d+\.\d+/);
-                const nodeId = match ? match[0] : '';
-                const shapes = nodeEl.querySelectorAll('rect, circle, polygon, path');
-
-                if (visited.some(v => v.replace('_', '.').trim() === nodeId.replace('_', '.').trim())) {
-                    shapes.forEach(shape => {
-                        shape.style.fill = '#7fffd4'; 
-                        shape.style.stroke = '#008b5e'; 
-                        shape.style.strokeWidth = '4px';
-                        shape.style.filter = 'drop-shadow(0 0 8px #00c78c)';
-                    });
-                }
-            });
-
-            // Highlight matching edges path
-            document.querySelectorAll('.mermaid svg g.edgeLabels g.edgeLabel').forEach(labelGroup => {
-                const textContent = labelGroup.textContent.trim();
-                if (edges.includes(textContent)) {
-                    labelGroup.style.filter = 'drop-shadow(0 0 4px #00ff66)';
-                    
-                    const labelClasses = Array.from(labelGroup.classList);
-                    const matchingPathGroup = Array.from(document.querySelectorAll('.mermaid svg g.edgePaths g.edgePath')).find(pathG => {
-                        return labelClasses.some(cls => cls !== 'edgeLabel' && pathG.classList.contains(cls));
-                    });
-
-                    if (matchingPathGroup) {
-                        const pathLine = matchingPathGroup.querySelector('path.path');
-                        if (pathLine) {
-                            pathLine.style.stroke = '#00ff66'; 
-                            pathLine.style.strokeWidth = '8px'; 
-                            pathLine.style.filter = 'drop-shadow(0 0 8px #00ff66)'; 
-                        }
-                    }
-                }
-            });
-
-            if (cardId !== "COMBINED_MIN_SUITE") {
-                if (visited.length > 0) {
-                    resultDiv.innerHTML = '<div class="tc-field"><strong style="color:#1d9e75">Visited:</strong> ' + visited.map(n => '<span class="path-tag path-tag-visited">' + n + '</span>').join('') + '</div>';
-                } else {
-                    resultDiv.innerHTML = '<div style="color:#888;font-size:11px">No path data assigned to this testcase</div>';
-                }
-            }
-        }
-
-        async function generateTests() {
-            tcCardCounter = 0;
-            const loading = document.getElementById('tc-loading'), display = document.getElementById('tc-display');
-            loading.style.display = 'block'; display.innerHTML = '';
-
-            try {
-                const res = await fetch(API + '/generate-tests', { method: 'POST' });
-                const raw = await res.text();
-                loading.style.display = 'none';
-                const data = extractJson(raw);
-                if (!data) { display.innerHTML = '<pre style="font-size:10px;">' + raw + '</pre>'; return; }
-
-                let html = '';
-                if (data.normal_test_cases) data.normal_test_cases.forEach(tc => html += renderTcCard(tc, 'badge-normal', 'NORMAL'));
-                if (data.exception_test_cases) data.exception_test_cases.forEach(tc => html += renderTcCard(tc, 'badge-exception', 'EXCEPTION'));
-                if (data.edge_cases) data.edge_cases.forEach(tc => html += renderTcCard(tc, 'badge-edge', 'EDGE'));
-                display.innerHTML = html || '<pre style="font-size:10px">' + raw + '</pre>';
-            } catch (err) { display.innerHTML = '<p style="color:red;">Error: ' + err.message + '</p>'; }
-        }
-
-        async function getAllPaths() {
-            const section = document.getElementById('paths-section'), loading = document.getElementById('paths-loading'), display = document.getElementById('paths-display');
-            section.style.display = 'block'; loading.style.display = 'block'; display.innerHTML = '';
-
-            try {
-                const res = await fetch(API + '/get-all-paths', { method: 'POST' });
-                const raw = await res.text();
-                loading.style.display = 'none';
-                const data = extractJson(raw);
-                if (!data) { display.innerHTML = '<pre style="font-size:10px;">' + raw + '</pre>'; return; }
-
-                let html = '';
-                if (data.total_paths !== undefined) {
-                    html += `
-                    <div class="summary-box" style="background: #eef2ff; border: 1px solid #c7d2fe; padding: 14px; border-radius: 10px;">
-                        <div style="font-weight: 800; color: #3730a3; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">
-                            Optimization: Maximum Set Cover
-                        </div>
-                        <strong>Total Paths Enumerated:</strong> ${data.total_paths} <br/>
-                        <strong>Minimized Suite Size:</strong> <span style="color:#1d9e75; font-weight:700;">${data.minimum_test_cases_for_max_coverage} Cases</span>
-                        
-                        <button class="btn" style="width:100%; margin-top:12px; margin-bottom:0; background:#4f46e5; text-transform: uppercase; font-size:11px; letter-spacing:0.5px;" 
-                            onclick='trackTestCase("COMBINED_MIN_SUITE", ${JSON.stringify(data.combined_union.nodes)}, ${JSON.stringify(data.combined_union.edges)})'>
-                            Visualize Combined Max Coverage (Union)
-                        </button>
-                    </div>
-                    <hr class="divider">
-                    `;
-                }
-                
-                if (data.minimum_test_suite) {
-                    html += '<div class="section-title">Individual Optimized Suite Cases</div>';
-                    data.minimum_test_suite.forEach(tc => html += renderTcCard(tc, 'badge-min', 'MIN SUITE'));
-                }
-                display.innerHTML = html;
-            } catch (err) { display.innerHTML = '<p style="color:red;">Error: ' + err.message + '</p>'; }
-        }
-
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                const svg = document.querySelector('.mermaid svg');
-                if (svg) {
-                    svgPanZoom(svg, { zoomEnabled: true, controlIconsEnabled: true, fit: false, center: false, initialZoom: 1.5, minZoom: 0.2, maxZoom: 10 });
-                }
-            }, 1000);
-        });
-    </script>
+        <div class="row" style="margin-bottom:10px"><button class="primary" id="apply">Apply filters</button><button id="clear">Clear filters</button><span id="selection" class="muted"></span></div>
+        <div id="notice" class="notice"></div><div id="graph" class="graph-wrap"><div class="empty">Select a class or method, or search for a node.</div></div>
+      </section>
+    </main>
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'neutral',flowchart:{htmlLabels:false,useMaxWidth:false}});
+    const $=id=>document.getElementById(id); let sources=[],selection={};
+    const api=async(url,options)=>{const r=await fetch(url,options);const data=await r.json();if(!r.ok)throw new Error(data.error||r.statusText);return data};
+    const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmtBytes=n=>n<1048576?(n/1024).toFixed(1)+' KiB':(n/1048576).toFixed(2)+' MiB';
+    async function refresh(){sources=await api('/api/source');renderSources();renderStats(await api('/api/stats'));renderCoverage(await api('/api/coverage'));await renderTree();}
+    function renderSources(){$('source-file').innerHTML=sources.map((f,i)=>`<option value="${i}">${esc(f.name)}</option>`).join('');showSource(0)}
+    function showSource(i){$('source').textContent=sources[i]?.source||''}
+    function renderStats(s){const vals=[['Statements',s.statements],['Classes',s.classes],['Methods',s.methods],['Nodes',s.nodes],['Edges',s.edges],['Files',s.sourceFiles]];$('stats').innerHTML=vals.map(v=>`<div class="stat"><b>${Number(v[1]).toLocaleString()}</b><span>${v[0]}</span></div>`).join('');const m=s.measured;const speed=m.speedup==null?'':`<span>Serial baseline: ${m.serialBaselineGraphMs} ms</span><span>Speedup: ${m.speedup}×</span>`;$('measured').innerHTML=`<strong>Measured</strong><span>Workers: ${m.workers} requested / ${m.effectiveWorkers} active</span><span>Parse: ${m.parseMs} ms</span><span>Graph: ${m.graphMs} ms</span><span>Total: ${m.totalMs} ms</span>${speed}<span>Graph heap: ~${fmtBytes(m.graphHeapBytes)}</span><span>JSON: ${m.jsonExportMs} ms</span><span>JSON size: ${fmtBytes(m.jsonBytes)}</span>`;$('theory').innerHTML=`<strong>Theoretical (papers)</strong><span>Construction time: ${s.theoreticalTime}</span><span>Graph space: ${s.theoreticalSpace}</span><span class="muted">S = program statements; worker count does not change these complexity bounds.</span>`}
+    function renderCoverage(view){const runtime=view.runtimeObserved,shown=runtime||view.staticPredicted,stat=view.staticPredicted;$('coverage-source').textContent=runtime?'Coverage source: Runtime observed':'Coverage source: Static predicted';$('coverage-limit').textContent=shown.limitation;const metrics=[...Object.values(shown.traditional),...Object.values(shown.objectOriented),...Object.values(shown.exception)];const staticMetrics=[...Object.values(stat.traditional),...Object.values(stat.objectOriented),...Object.values(stat.exception)];$('coverage-body').innerHTML=metrics.map((m,i)=>`<tr data-metric="${i}"><td>${esc(m.label)}</td><td>${m.markingAvailable?m.numerator:'N/A'}</td><td>${m.denominator||'N/A'}</td><td>${m.percentage==null?'N/A':m.percentage+'%'}</td><td>${m.markingAvailable?(runtime?'Runtime':'Static'):'N/A'}</td><td>${staticMetrics[i].percentage==null?'N/A':staticMetrics[i].percentage+'%'}</td></tr>`).join('');$('coverage-body').querySelectorAll('tr').forEach(row=>row.onclick=()=>{const m=metrics[Number(row.dataset.metric)];const formula=m.percentage==null?'N/A':`${m.numerator} / ${m.denominator} × 100 = ${m.percentage}%`;$('coverage-formula').innerHTML=`<strong>${esc(m.label)}</strong><br>Covered: ${m.markingAvailable?m.numerator:'N/A'}<br>Total: ${m.denominator||'N/A'}<br><br>Coverage = ${formula}<br>Formula: ${esc(m.definition)}<br>Source: ${esc(m.definitionId)} · ${esc(m.provenance)}<br>Status: ${m.markingAvailable?esc(m.measurementKind):'runtime marking unavailable'}`});if(view.session)$('session-status').textContent=`${view.session.id} · ${view.session.testCount} cumulative test(s): ${view.session.tests.map(t=>t.testCase).join(', ')||'none'}`}
+    async function renderTree(){const classes=await api('/api/classes');let html='';let currentFile;for(const c of classes){if(c.file!==currentFile){currentFile=c.file;html+=`<div class="file-label">${esc(c.file)}</div>`}html+=`<button data-class="${esc(c.name)}" data-file="${esc(c.file)}">▸ ${esc(c.name)} <span class="muted">(${c.methodCount})</span></button><div data-methods="${esc(c.id)}"></div>`}$('tree').innerHTML=html;$('tree').querySelectorAll('[data-class]').forEach(b=>b.onclick=()=>selectClass(b));}
+    async function selectClass(button){selection={file:button.dataset.file,classId:button.dataset.class};$('selection').textContent=`Class ${selection.classId}`;const box=button.nextElementSibling;if(!box.dataset.loaded){const methods=await api(`/api/methods?file=${encodeURIComponent(selection.file)}&classId=${encodeURIComponent(selection.classId)}`);box.innerHTML=methods.map(m=>`<button class="method" data-method="${esc(m.name)}">↳ ${esc(m.name)}()</button>`).join('');box.dataset.loaded='1';box.querySelectorAll('[data-method]').forEach(m=>m.onclick=e=>{e.stopPropagation();selection={file:button.dataset.file,classId:button.dataset.class,methodId:m.dataset.method};$('selection').textContent=`${selection.classId}.${selection.methodId}()`;loadGraph()})}await loadGraph()}
+    function params(){const p=new URLSearchParams();for(const [k,v] of Object.entries(selection))if(v)p.set(k,v);const map={'node-id':'nodeId','node-type':'nodeType','edge-type':'edgeType','limit':'limit','edge-limit':'edgeLimit','depth':'depth'};for(const [id,key] of Object.entries(map)){const v=$(id).value.trim();if(v)p.set(key,v)}return p}
+    async function loadGraph(){const data=await api('/api/graph?'+params());$('notice').style.display=data.truncated?'block':'none';$('notice').textContent=data.message||'';if(!data.nodes.length){$('graph').innerHTML='<div class="empty">No matching nodes.</div>';return}const ids=new Map(data.nodes.map((n,i)=>[n.id,'n'+i])),visitedNodes=new Set(data.visitedNodes||[]),visitedEdges=new Set(data.visitedEdges||[]);let text='flowchart TD\n',edgeIndex=0;for(const n of data.nodes){const label=(n.internalId+' · '+n.type).replace(/["\[\]{}<>]/g,' ');text+=`${ids.get(n.id)}["${label}"]\n`;if(visitedNodes.has(n.id))text+=`style ${ids.get(n.id)} fill:#b8f1d8,stroke:#147653,stroke-width:3px\n`}for(const e of data.edges){if(ids.has(e.source)&&ids.has(e.target)){const label=(e.internalId+(e.branch?' · '+e.branch:'')).replace(/["|<>]/g,' ');text+=`${ids.get(e.source)} -->|${label}| ${ids.get(e.target)}\n`;text+=`linkStyle ${edgeIndex++} stroke:${visitedEdges.has(e.id)?'#147653':'#aeb8b5'},stroke-width:${visitedEdges.has(e.id)?'3px':'1px'}\n`}}try{const rendered=await mermaid.render('projection-'+Date.now(),text);$('graph').innerHTML=rendered.svg}catch(e){$('graph').innerHTML=`<div class="error">Unable to render projection: ${esc(e.message)}</div>`}}
+    $('files').onchange=()=>$('submit-status').textContent=`${$('files').files.length} file(s) selected`;
+    $('submit').onclick=async()=>{const files=[...$('files').files];if(!files.length){$('submit-status').textContent='Select one or more .java files.';return}$('submit').disabled=true;$('submit-status').textContent='Parsing and constructing graph…';try{const payload={files:await Promise.all(files.map(async f=>({name:f.name,source:await f.text()}))),workers:Number($('workers').value),measureSerialBaseline:$('baseline').checked};await api('/api/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});selection={};await refresh();$('graph').innerHTML='<div class="empty">Select a class or method.</div>';$('submit-status').textContent='Graph ready.'}catch(e){$('submit-status').textContent=e.message;$('submit-status').className='error'}finally{$('submit').disabled=false}};
+    $('execute').onclick=async()=>{const button=$('execute');button.disabled=true;$('execution-status').innerHTML='<span>Instrumenting and compiling…</span>';try{const raw=$('runtime-args').value.trim();const payload={mainClass:$('main-class').value.trim(),arguments:raw?raw.split(/\s+/):[],testCase:$('test-name').value.trim(),timeoutMillis:Number($('timeout').value)};const r=await api('/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const unsupported=r.unsupported?.length?`<span class="warning">Unsupported: ${esc(r.unsupported.join('; '))}</span>`:'',targets=r.runtimeTargetMethods?.length?`<span>Runtime target: ${esc(r.runtimeTargetMethods.join(', '))}</span>`:'';$('execution-status').innerHTML=`<strong>EXECUTION</strong><span>Execution Status: ${esc(r.status)}</span><span>Test Case: ${esc(payload.testCase)}</span><span>Main class: ${esc(payload.mainClass)}</span><span>Files executed: ${r.filesExecuted}</span><span>Compilation: ${r.compileMs} ms</span><span>Execution: ${r.executionMs} ms</span><span>Total runtime: ${r.totalRuntimeMs} ms</span>${targets}<span>Coverage Source: ${r.compilationSuccess?'RUNTIME_OBSERVED':'none'}</span>${unsupported}${r.stderr?`<span class="error">${esc(r.stderr)}</span>`:''}`;renderCoverage(await api('/api/coverage'));if(Object.keys(selection).length)await loadGraph()}catch(e){$('execution-status').innerHTML=`<span class="error">${esc(e.message)}</span>`}finally{button.disabled=false}};
+    async function newSession(){await api('/api/coverage/session',{method:'POST'});renderCoverage(await api('/api/coverage'));$('execution-status').innerHTML='<span>Status: new runtime session</span>';if(Object.keys(selection).length)await loadGraph()}$('new-session').onclick=newSession;$('reset-session').onclick=async()=>{await api('/api/coverage/session/reset',{method:'POST'});renderCoverage(await api('/api/coverage'));$('execution-status').innerHTML='<span>Status: session reset</span>';if(Object.keys(selection).length)await loadGraph()};
+    $('enumerate-paths').onclick=async()=>{const p=new URLSearchParams({pathLimit:$('path-limit').value,pathLengthLimit:$('path-length').value,stateLimit:$('state-limit').value,timeLimitMs:$('path-time').value});$('path-status').textContent='Enumerating within limits…';try{const r=await api('/api/paths?'+p,{method:'POST'});$('path-status').innerHTML=`<strong>${r.pathsGenerated.toLocaleString()} paths generated${r.truncated?' (truncated)':''}</strong><br>Status: ${esc(r.status)} · Stop reason: ${esc(r.stopReason)}<br>Path limit: ${r.pathLimit.toLocaleString()} · Length limit: ${r.pathLengthLimit.toLocaleString()} · State limit: ${r.traversalStateLimit.toLocaleString()} · Time limit: ${r.timeLimitMs} ms<br>Traversal states: ${r.traversalStates.toLocaleString()} · Maximum path length: ${r.maximumPathLength.toLocaleString()} · Generation: ${r.generationTimeMs} ms`}catch(e){$('path-status').innerHTML=`<span class="error">${esc(e.message)}</span>`}};
+    $('source-file').onchange=e=>showSource(Number(e.target.value));$('apply').onclick=()=>{const id=$('node-id').value.trim();if(id)selection={nodeId:id};loadGraph()};$('clear').onclick=()=>{for(const id of ['node-id','node-type','edge-type'])$(id).value='';selection={};$('selection').textContent='';$('graph').innerHTML='<div class="empty">Select a class or method, or search for a node.</div>';$('notice').style.display='none'};$('program').onclick=()=>{selection={};$('selection').textContent='Program overview (bounded)';loadGraph()};refresh().catch(e=>$('submit-status').textContent=e.message);
+  </script>
 </body>
-
 </html>
