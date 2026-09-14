@@ -72,6 +72,43 @@ public final class GraphProjectionService {
     return new Projection(selectedNodes, selectedEdges, allMatchingNodes.size(), allMatchingEdges.size(), truncated, message);
   }
 
+  /** Bounded projection centred on runtime evidence rather than an arbitrary graph root. */
+  public Projection projectEvidence(CanonicalGraph graph, Set<String> internalNodes, Set<String> internalEdges,
+                                    int nodeLimit, int edgeLimit, int depth) {
+    int nodes = Math.max(1, Math.min(nodeLimit <= 0 ? 250 : nodeLimit, 500));
+    int edges = Math.max(1, Math.min(edgeLimit <= 0 ? 750 : edgeLimit, 1500));
+    int levels = Math.max(0, Math.min(depth, 3));
+    Map<String, NodeRecord> byId = new LinkedHashMap<>();
+    graph.nodes().forEach(node -> byId.put(node.id(), node));
+    LinkedHashSet<String> seeds = new LinkedHashSet<>();
+    graph.nodes().stream().filter(node -> internalNodes.contains(node.internalId())).forEach(node -> seeds.add(node.id()));
+    graph.edges().stream().filter(edge -> internalEdges.contains(edge.internalId())).forEach(edge -> {
+      seeds.add(edge.source()); seeds.add(edge.target());
+    });
+    LinkedHashSet<String> eligible = new LinkedHashSet<>(seeds);
+    for (int level = 0; level < levels; level++) {
+      LinkedHashSet<String> next = new LinkedHashSet<>(eligible);
+      for (EdgeRecord edge : graph.edges()) if (eligible.contains(edge.source()) || eligible.contains(edge.target())) {
+        next.add(edge.source()); next.add(edge.target());
+      }
+      eligible = next;
+    }
+    Set<String> finalEligible = Set.copyOf(eligible);
+    List<NodeRecord> matchingNodes = graph.nodes().stream().filter(node -> finalEligible.contains(node.id())).toList();
+    LinkedHashSet<String> selectedIds = new LinkedHashSet<>();
+    matchingNodes.stream().limit(nodes).forEach(node -> selectedIds.add(node.id()));
+    List<EdgeRecord> matchingEdges = graph.edges().stream()
+        .filter(edge -> finalEligible.contains(edge.source()) && finalEligible.contains(edge.target())).toList();
+    List<EdgeRecord> selectedEdges = matchingEdges.stream()
+        .filter(edge -> selectedIds.contains(edge.source()) && selectedIds.contains(edge.target())).limit(edges).toList();
+    boolean truncated = selectedIds.size() < matchingNodes.size() || selectedEdges.size() < matchingEdges.size();
+    String message = truncated ? "Runtime projection contains " + matchingNodes.size() + " nodes and "
+        + matchingEdges.size() + " edges. Showing " + selectedIds.size() + " nodes and "
+        + selectedEdges.size() + " edges." : null;
+    return new Projection(selectedIds.stream().map(byId::get).toList(), selectedEdges,
+        matchingNodes.size(), matchingEdges.size(), truncated, message);
+  }
+
   private Set<String> filterNodes(CanonicalGraph graph, Query query) {
     LinkedHashSet<String> ids = new LinkedHashSet<>();
     boolean classSummary = query.classId() != null && query.methodId() == null;

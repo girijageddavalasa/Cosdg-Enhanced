@@ -83,6 +83,28 @@ public class GraphWorkspaceTest extends TestCase {
     assertEquals("O(S)", stats.theoreticalSpace());
   }
 
+  public void testResearchMetadataIsExplicitAndFingerprintScoped() {
+    GraphWorkspace workspace = new GraphWorkspace();
+    workspace.submit(List.of(new SourceFile("Sample.java", "class A { void a(){int x=1;} }")), 1, false, true);
+    String fingerprint = com.example.dag.coverage.CoverageObligationEngine.fingerprint(workspace.current());
+    var research = GraphWorkspace.researchMetadata(workspace.current(), fingerprint);
+    assertEquals("COSDG_RESEARCH_METADATA_V1", research.schemaVersion());
+    assertEquals(fingerprint, research.graphFingerprint());
+    assertEquals(workspace.current().statistics(), research.statistics());
+    assertNotNull(research.generatedAtUtc());
+    assertTrue(research.environment().availableProcessors() > 0);
+    assertTrue(research.environment().maximumJvmHeapBytes() > 0);
+    assertTrue(research.statistics().measured().heapAfterParseBytes() > 0);
+    assertTrue(research.statistics().measured().heapAfterGraphBytes() > 0);
+    assertTrue(research.statistics().measured().memoryStabilized());
+    assertTrue(research.methodology().heapApproximate());
+    assertTrue(research.methodology().excluded().contains("browser layout"));
+    JsonObject json = JsonParser.parseString(new com.google.gson.Gson().toJson(research)).getAsJsonObject();
+    assertTrue(json.getAsJsonObject("statistics").getAsJsonObject("measured").has("graphHeapBytes"));
+    assertTrue(json.getAsJsonObject("statistics").getAsJsonObject("measured").has("jsonExportMs"));
+    assertEquals("O(S)", json.getAsJsonObject("statistics").get("theoreticalTime").getAsString());
+  }
+
   public void testSynthetic5000QueryNeverReturnsWholeGraph() throws Exception {
     Path source = Path.of("benchmarks", "Synthetic5000.java");
     assertTrue(Files.exists(source));

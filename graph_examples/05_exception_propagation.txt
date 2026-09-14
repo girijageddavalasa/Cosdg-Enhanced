@@ -1,0 +1,19 @@
+class ExceptionPropagationExample {
+    static void fail(int value) {
+        if (value == 0) {
+            throw new RuntimeException("zero");
+        }
+    }
+
+    static void caller(int value) {
+        try {
+            fail(value);
+        } catch (RuntimeException exception) {
+            System.out.println("caught");
+        }
+    }
+
+    public static void main(String[] args) {
+        caller(0);
+    }
+}

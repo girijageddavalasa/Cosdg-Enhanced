@@ -1,0 +1,23 @@
+class ParentExample {
+    int value() {
+        return 1;
+    }
+}
+
+class ChildExample extends ParentExample {
+    @Override
+    int value() {
+        return 2;
+    }
+}
+
+class InheritanceCallExample {
+    static int invoke(ParentExample receiver) {
+        return receiver.value();
+    }
+
+    public static void main(String[] args) {
+        ParentExample receiver = new ChildExample();
+        System.out.println(invoke(receiver));
+    }
+}

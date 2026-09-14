@@ -51,6 +51,20 @@ public class RuntimeCoverageIntegrationTest extends TestCase {
     assertTrue(metric(session, workspace, "methodCall").markingAvailable());
   }
 
+  public void testInterfacePolymorphicRuntimeMarksConcreteImplementation() {
+    GraphWorkspace workspace=graph("interface P{void f();}class A implements P{public void f(){int x=1;}}class B implements P{public void f(){int x=2;}}class Test{public static void main(String[]a){P p=new B();p.f();}}");
+    RuntimeCoverageSession session=session(workspace);RuntimeExecutionService.Result run=execute(workspace);session.add("interface-poly",run);
+    MetricResult polymorphic=metric(session,workspace,"polymorphic");
+    assertEquals(1L,polymorphic.numerator());assertEquals(2L,polymorphic.denominator());
+    assertTrue(run.runtimeTargetMethods().stream().anyMatch(target->target.contains("B")||target.contains("ve2_")));
+  }
+
+  public void testNestedInternalCallMarksMethodCallEdge() {
+    GraphWorkspace workspace=graph("class Test{static int value(){return 1;}public static void main(String[]a){System.out.println(value());}}");
+    RuntimeCoverageSession session=session(workspace);session.add("nested",execute(workspace));
+    MetricResult calls=metric(session,workspace,"methodCall");assertEquals(1L,calls.numerator());assertEquals(1L,calls.denominator());
+  }
+
   public void testOneOfMultipleCatchTypesUsesEe2Population() {
     GraphWorkspace workspace = graph("""
         import java.io.IOException;

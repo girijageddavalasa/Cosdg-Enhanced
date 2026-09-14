@@ -14,6 +14,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -26,11 +27,22 @@ import java.util.concurrent.Future;
 public final class GraphWorkspace {
   public record SourceFile(String name, String source) {}
   public record Performance(int workers, int effectiveWorkers, double parseMs, double graphMs, double totalMs,
-                            long graphHeapBytes, double jsonExportMs, int jsonBytes,
+                            long heapAfterParseBytes, long heapAfterGraphBytes, long graphHeapBytes,
+                            long graphHeapRawDeltaBytes,
+                            boolean memoryStabilized, double jsonExportMs, int jsonBytes,
                             Double serialBaselineGraphMs, Double speedup) {}
   public record Statistics(int sourceFiles, int statements, int classes, int methods,
                            int nodes, int edges, int syntaxErrors, Performance measured,
                            String theoreticalTime, String theoreticalSpace) {}
+  public record Environment(String javaVersion, String javaVendor, String vmName,
+                            String osName, String osVersion, String osArchitecture,
+                            int availableProcessors, long maximumJvmHeapBytes) {}
+  public record MeasurementMethodology(String timingClock, String timingScope,
+                                       String heapMethod, boolean heapApproximate,
+                                       String jsonMeasurementScope, List<String> excluded) {}
+  public record ResearchMetadata(String schemaVersion, String generatedAtUtc, String graphFingerprint,
+                                 Environment environment, Statistics statistics,
+                                 MeasurementMethodology methodology) {}
   public record Snapshot(String program, List<SourceFile> sources, List<DAGBuilder> builders,
                          List<Node> startNodes, CanonicalGraph graph, String canonicalJson,
                          Statistics statistics) {}
@@ -70,6 +82,23 @@ public final class GraphWorkspace {
 
   public Snapshot current() { return current; }
 
+  /** Creates export metadata without changing the deterministic canonical graph payload. */
+  public static ResearchMetadata researchMetadata(Snapshot snapshot, String graphFingerprint) {
+    Runtime runtime = Runtime.getRuntime();
+    Environment environment = new Environment(System.getProperty("java.version"),
+        System.getProperty("java.vendor"), System.getProperty("java.vm.name"),
+        System.getProperty("os.name"), System.getProperty("os.version"), System.getProperty("os.arch"),
+        runtime.availableProcessors(), runtime.maxMemory());
+    MeasurementMethodology methodology = new MeasurementMethodology("System.nanoTime",
+        "Parsing and graph construction measured separately in the server JVM; totalMs is parseMs + graphMs.",
+        "Runtime.totalMemory - Runtime.freeMemory; graphHeapRawDeltaBytes preserves the signed observation and graphHeapBytes is its non-negative display estimate"
+            +(snapshot.statistics().measured().memoryStabilized()?" with explicit GC stabilization.":" without explicit GC stabilization."),
+        true, "jsonExportMs and jsonBytes measure the deterministic canonical graph payload before the research section is attached.",
+        List.of("test generation", "test execution", "path enumeration", "HTTP transfer", "browser layout", "Mermaid/SVG rendering"));
+    return new ResearchMetadata("COSDG_RESEARCH_METADATA_V1", Instant.now().toString(),
+        graphFingerprint, environment, snapshot.statistics(), methodology);
+  }
+
   private BuildResult build(List<SourceFile> sources, int workers, Double serialBaseline, boolean stabilizeMemory) {
     String program = sources.size() == 1 ? sources.get(0).name() : "submitted-program";
     int poolSize = Math.max(1, Math.min(workers, sources.size()));
@@ -85,7 +114,9 @@ public final class GraphWorkspace {
       Built programGraph = buildProgram(program, parsed);
       List<Built> built = List.of(programGraph);
       double graphMs = elapsedMs(graphStart);
-      long graphHeap = Math.max(0, (stabilizeMemory ? stabilizedHeap() : usedHeap()) - heapAfterParse);
+      long heapAfterGraph = stabilizeMemory ? stabilizedHeap() : usedHeap();
+      long graphHeapRawDelta = heapAfterGraph - heapAfterParse;
+      long graphHeap = Math.max(0, graphHeapRawDelta);
 
       List<DAGBuilder> builders = built.stream().map(Built::builder).toList();
       List<Node> starts = built.stream().map(Built::start).toList();
@@ -102,7 +133,9 @@ public final class GraphWorkspace {
       Double speedup = serialBaseline == null || graphMs <= 0 || poolSize <= 1 ? null
           : Math.round((serialBaseline / graphMs) * 100.0) / 100.0;
       Performance performance = new Performance(workers, poolSize, parseMs, graphMs,
-          Math.round((parseMs + graphMs) * 10.0) / 10.0, graphHeap, jsonMs, jsonBytes,
+          Math.round((parseMs + graphMs) * 10.0) / 10.0, heapAfterParse, heapAfterGraph, graphHeap,
+          graphHeapRawDelta,
+          stabilizeMemory, jsonMs, jsonBytes,
           serialBaseline, speedup);
       Statistics statistics = new Statistics(sources.size(), statements, classes, methods,
           graph.nodes().size(), graph.edges().size(), syntaxErrors, performance, "O(S)", "O(S)");
@@ -167,7 +200,17 @@ public final class GraphWorkspace {
   }
   private static double elapsedMs(long start) { return Math.round((System.nanoTime() - start) / 100_000.0) / 10.0; }
   private static long usedHeap() { Runtime runtime = Runtime.getRuntime(); return runtime.totalMemory() - runtime.freeMemory(); }
-  private static long stabilizedHeap() { System.gc(); return usedHeap(); }
+  private static long stabilizedHeap() {
+    for (int i = 0; i < 3; i++) {
+      System.gc();
+      try { Thread.sleep(25); }
+      catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        break;
+      }
+    }
+    return usedHeap();
+  }
 
   private static final class StructureCounter extends JavaParserBaseVisitor<Void> {
     int classes; int methods; int statements;

@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Compiles and runs instrumented source in a bounded child JVM. */
 public final class RuntimeExecutionService {
@@ -48,11 +50,30 @@ public final class RuntimeExecutionService {
                        CoverageResult coverage) {}
 
   public Result execute(Snapshot snapshot, Request request) {
+    return execute(snapshot, request, List.of(), List.of());
+  }
+
+  /** Executes additional generated harness sources beside, but never inside, the submitted sources. */
+  public Result execute(Snapshot snapshot, Request request, List<com.example.dag.server.GraphWorkspace.SourceFile> harnesses) {
+    return execute(snapshot, request, harnesses, List.of());
+  }
+
+  /** Executes generated sources with explicit, preconfigured test-runtime dependencies. */
+  public Result execute(Snapshot snapshot, Request request,
+                        List<com.example.dag.server.GraphWorkspace.SourceFile> harnesses,
+                        List<Path> additionalClasspath) {
     if (snapshot == null) return failure("NO_GRAPH", "No graph has been generated", request);
     if (request.mainClass() == null || request.mainClass().isBlank()) return failure("INVALID_REQUEST", "A main class is required", request);
     SourceInstrumenter.ProgramResult instrumented;
     try { instrumented = new SourceInstrumenter().instrumentAll(snapshot.program(), snapshot.sources(), snapshot.graph()); }
     catch (RuntimeException failed) { return failure("INSTRUMENTATION_FAILED", failed.getMessage(), request); }
+    if (harnesses != null && !harnesses.isEmpty()) {
+      List<SourceInstrumenter.InstrumentedFile> files = new ArrayList<>(instrumented.files());
+      for (var harness : harnesses) files.add(new SourceInstrumenter.InstrumentedFile(
+          harness.name(), harness.source(), instrumented.collectorPackage()));
+      instrumented = new SourceInstrumenter.ProgramResult(List.copyOf(files), instrumented.collectorSource(),
+          instrumented.collectorPackage(), instrumented.instrumentationMap(), instrumented.unsupported(), instrumented.rebuiltGraph());
+    }
 
     Path work = null;
     try {
@@ -62,8 +83,9 @@ public final class RuntimeExecutionService {
       Path classes = Files.createDirectories(work.resolve("classes"));
       Path collector = work.resolve("__CosdgRuntime.java");
       List<Path> sourcePaths = new ArrayList<>();
+      int sourceIndex = 0;
       for (SourceInstrumenter.InstrumentedFile file : instrumented.files()) {
-        Path source = work.resolve(file.name());
+        Path source = work.resolve(compilationFileName(file, ++sourceIndex));
         Files.writeString(source, file.source(), StandardCharsets.UTF_8);
         sourcePaths.add(source);
       }
@@ -71,6 +93,9 @@ public final class RuntimeExecutionService {
 
       long compileStart = System.nanoTime();
       List<String> compileCommand = new ArrayList<>(List.of(tool("javac"), "-proc:none", "-encoding", "UTF-8", "-d", classes.toString()));
+      if (additionalClasspath != null && !additionalClasspath.isEmpty()) {
+        compileCommand.add("-cp"); compileCommand.add(classpath(additionalClasspath));
+      }
       sourcePaths.forEach(path -> compileCommand.add(path.toString())); compileCommand.add(collector.toString());
       ProcessResult compilation = run(compileCommand, work, 30_000);
       double compileMs = elapsed(compileStart);
@@ -79,8 +104,10 @@ public final class RuntimeExecutionService {
             compilation.stdout, compilation.stderr, instrumented, Set.of(), Set.of(), Set.of(), Set.of(), Map.of(), Set.of(), snapshot);
       }
 
+      String runtimeClasspath = classes + (additionalClasspath == null || additionalClasspath.isEmpty() ? ""
+          : java.io.File.pathSeparator + classpath(additionalClasspath));
       List<String> command = new ArrayList<>(List.of(tool("java"), "-Xmx128m", "-XX:MaxMetaspaceSize=128m",
-          "-cp", classes.toString(), request.mainClass()));
+          "-cp", runtimeClasspath, request.mainClass()));
       command.addAll(request.arguments());
       long executionStart = System.nanoTime();
       ProcessResult execution = run(command, work, request.timeoutMillis());
@@ -193,6 +220,15 @@ public final class RuntimeExecutionService {
     return Path.of(System.getProperty("java.home"), "bin", name + suffix).toString();
   }
   private static double elapsed(long start) { return Math.round((System.nanoTime() - start) / 100_000.0) / 10.0; }
+  private static String compilationFileName(SourceInstrumenter.InstrumentedFile file, int index) {
+    String name = Path.of(file.name()).getFileName().toString();
+    if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".java")) return name;
+    Matcher declared = Pattern.compile("\\b(?:public\\s+)?(?:class|interface|enum|record)\\s+([A-Za-z_$][\\w$]*)").matcher(file.source());
+    return (declared.find() ? declared.group(1) : "CosdgSource" + index) + ".java";
+  }
+  private static String classpath(List<Path> entries) {
+    return String.join(java.io.File.pathSeparator, entries.stream().map(path -> path.toAbsolutePath().normalize().toString()).toList());
+  }
   private static void deleteTree(Path root) {
     try (var paths = Files.walk(root)) { paths.sorted((a, b) -> b.compareTo(a)).forEach(path -> { try { Files.deleteIfExists(path); } catch (IOException ignored) {} }); }
     catch (IOException ignored) {}

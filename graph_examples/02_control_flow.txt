@@ -1,0 +1,25 @@
+class ControlFlowExample {
+    static int classify(int x) {
+        int result = 0;
+
+        if (x > 0) {
+            if (x < 10) {
+                result = 1;
+            } else {
+                result = 2;
+            }
+        } else {
+            result = -1;
+        }
+
+        while (result < 3) {
+            result++;
+        }
+
+        return result;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(classify(5));
+    }
+}

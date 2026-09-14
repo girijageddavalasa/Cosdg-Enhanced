@@ -1,0 +1,3 @@
+/target/
+/tools/evosuite/*.jar
+/results/

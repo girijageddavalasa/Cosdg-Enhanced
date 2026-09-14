@@ -1,0 +1,15 @@
+class MethodCallExample {
+    static int doubleValue(int value) {
+        return value * 2;
+    }
+
+    static int calculate(int input) {
+        int doubled = doubleValue(input);
+        return doubled + 1;
+    }
+
+    public static void main(String[] args) {
+        int result = calculate(4);
+        System.out.println(result);
+    }
+}

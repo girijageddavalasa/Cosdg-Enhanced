@@ -237,6 +237,11 @@ public class DAGBuilder {
       edgeLabel = String.format("eb.%02d", classMemberEdgeCount++);
       edgeType = "CLASS_MEMBER";
 
+    } else if (relationship.equalsIgnoreCase("abstract_class_member")) {
+
+      edgeLabel = String.format("eb.%02d", classMemberEdgeCount++);
+      edgeType = "ABSTRACT_CLASS_MEMBER";
+
     } else if (relationship.equalsIgnoreCase("data")) {
 
       edgeLabel = String.format("ed.%02d", dataEdgeCount++);

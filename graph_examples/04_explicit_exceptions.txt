@@ -1,0 +1,18 @@
+class ExplicitExceptionExample {
+    static int validate(int value) {
+        try {
+            if (value < 0) {
+                throw new IllegalArgumentException("negative value");
+            }
+            return value;
+        } catch (IllegalArgumentException exception) {
+            return -1;
+        } finally {
+            System.out.println("validation finished");
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println(validate(-2));
+    }
+}

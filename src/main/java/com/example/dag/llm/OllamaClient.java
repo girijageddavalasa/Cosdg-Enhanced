@@ -4,12 +4,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 public class OllamaClient {
 
-    private static final HttpClient CLIENT = HttpClient.newHttpClient();
+    private static final HttpClient CLIENT = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     private static final String OLLAMA_URL = "http://localhost:11434/api/generate";
 
     public static String generate(String prompt) throws Exception {
@@ -24,6 +25,7 @@ public class OllamaClient {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(OLLAMA_URL))
                 .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(5))
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody.toString()))
                 .build();
 

@@ -88,4 +88,51 @@ public class GraphConstructionTest extends TestCase {
     assertEquals(2, nodes(b, "VAR_DECL"));
     assertEquals(1, edges(b, "DATA_DEPENDENCE").size());
   }
+
+  public void testReturnVariableHasDefinitionUseDependence() {
+    DAGBuilder b = build("class A { int m(int input){ int x=input+1; int y=x*2; return y; } }");
+    Node yDefinition = b.getAllNodes().stream().filter(n -> n.sourceLine == 1 && n.type.contains("VAR_DECL"))
+        .reduce((first, second) -> second).orElseThrow();
+    Node returnStatement = b.getAllNodes().stream().filter(n -> n.type.contains("STMT")).findFirst().orElseThrow();
+    assertTrue(edges(b, "DATA_DEPENDENCE").stream().anyMatch(e -> e.from == yDefinition && e.to == returnStatement));
+    assertTrue(edges(b, "DATA_DEPENDENCE").stream().anyMatch(e -> e.from == returnStatement && e.to.type.contains("FORMAL_OUT")));
+  }
+
+  public void testBranchDefinitionsMergeAtFollowingUse() {
+    DAGBuilder b = build("""
+        class A {
+          int m(int x) {
+            int r = 0;
+            if (x > 0) { r = 1; } else { r = 2; }
+            return r;
+          }
+        }
+        """);
+    Node returnNode = b.getAllNodes().stream()
+        .filter(n -> n.sourceLine == 5 && n.type.contains("STMT")).findFirst().orElseThrow();
+    assertEquals(2, edges(b, "DATA_DEPENDENCE").stream()
+        .filter(e -> e.to == returnNode && e.from.sourceLine == 4).count());
+  }
+
+  public void testLoopUpdateReachesPredicateAndExitUse() {
+    DAGBuilder b = build("""
+        class A {
+          int m(int x) {
+            int r = x;
+            while (r < 3) { r++; }
+            return r;
+          }
+        }
+        """);
+    Node predicate = b.getAllNodes().stream()
+        .filter(n -> n.type.contains("LOOP_PREDICATE")).findFirst().orElseThrow();
+    Node update = b.getAllNodes().stream()
+        .filter(n -> n.sourceLine == 4 && n.type.contains("STMT")).findFirst().orElseThrow();
+    Node returnNode = b.getAllNodes().stream()
+        .filter(n -> n.sourceLine == 5 && n.type.contains("STMT")).findFirst().orElseThrow();
+    assertTrue(edges(b, "DATA_DEPENDENCE").stream().anyMatch(e -> e.from == update && e.to == predicate));
+    assertTrue(edges(b, "DATA_DEPENDENCE").stream().anyMatch(e -> e.from == update && e.to == returnNode));
+    assertTrue(edges(b, "CONTROL_DEPENDENCE").stream()
+        .anyMatch(e -> e.from == predicate && e.to == returnNode && "false".equals(e.branch)));
+  }
 }

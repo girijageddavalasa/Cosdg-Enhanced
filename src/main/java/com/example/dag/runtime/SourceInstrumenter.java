@@ -94,7 +94,8 @@ public final class SourceInstrumenter {
 
     @Override public Void visitBlockStatement(JavaParser.BlockStatementContext ctx) {
       Node node = nodes.get(ctx);
-      if (node != null && ctx.localVariableDeclaration() != null) out.insertBefore(ctx.start, probe(node, "NODE_HIT"));
+      if (node != null && ctx.localVariableDeclaration() != null)
+        out.insertBefore(ctx.start, callProbes(ctx) + probe(node, "NODE_HIT"));
       return visitChildren(ctx);
     }
 
@@ -102,15 +103,28 @@ public final class SourceInstrumenter {
       Node node = nodes.get(ctx);
       if (node == null) return visitChildren(ctx);
       if (ctx.IF() != null) {
+        String calls=callProbes(ctx.expression(0));if(!calls.isEmpty())out.insertBefore(ctx.start,calls);
         rewritePredicate(ctx.expression(0), node, "BRANCH");
         return visitChildren(ctx);
       }
       if (ctx.WHILE() != null && ctx.DO() == null) {
-        rewritePredicate(ctx.expression(0), node, "LOOP");
+        String calls=callProbes(ctx.expression(0));if(!calls.isEmpty())out.insertBefore(ctx.start,calls);
+        rewriteLoopPredicate(ctx.expression(0), node);
         return visitChildren(ctx);
       }
-      if (ctx.FOR() != null || ctx.DO() != null) {
-        unsupported.add("Runtime predicate/branch marking is unsupported for for/do loops at line " + ctx.start.getLine());
+      if (ctx.FOR() != null) {
+        JavaParser.ForControlContext control = ctx.forControl();
+        if (control != null && control.enhancedForControl() == null && control.expression() != null) {
+          String calls=callProbes(control.expression());if(!calls.isEmpty())out.insertBefore(ctx.start,calls);
+          rewriteLoopPredicate(control.expression(), node);
+        } else {
+          unsupported.add("Runtime predicate/branch marking is unsupported for enhanced or conditionless for loops at line " + ctx.start.getLine());
+          insertStatementProbe(ctx, probe(node, "NODE_HIT"));
+        }
+        return visitChildren(ctx);
+      }
+      if (ctx.DO() != null) {
+        unsupported.add("Runtime predicate/branch marking is unsupported for do loops at line " + ctx.start.getLine());
         insertStatementProbe(ctx, probe(node, "NODE_HIT"));
         return visitChildren(ctx);
       }
@@ -118,7 +132,7 @@ public final class SourceInstrumenter {
         out.insertAfter(ctx.block().start, probe(node, "NODE_HIT"));
         return visitChildren(ctx);
       }
-      insertStatementProbe(ctx, probe(node, ctx.THROW() != null ? "EXCEPTION_THROW" : "NODE_HIT"));
+      insertStatementProbe(ctx, callProbes(ctx)+probe(node, ctx.THROW() != null ? "EXCEPTION_THROW" : "NODE_HIT"));
       return visitChildren(ctx);
     }
 
@@ -154,7 +168,6 @@ public final class SourceInstrumenter {
         Edge member = uniqueIncoming(node, "CLASS_MEMBER");
         if (member != null) code.append("__CosdgRuntime.hit(\"EDGE_HIT\",\"").append(member.label).append("\");");
       }
-      if (outgoingCallCount(node) > 0) code.append("__CosdgRuntime.call(\"").append(node.id).append("\");");
       if ("EXCEPTION_THROW".equals(event)) {
         List<Edge> throwsEdges = outgoing(node, "EXCEPTION_THROW");
         if (throwsEdges.size() == 1) {
@@ -163,6 +176,8 @@ public final class SourceInstrumenter {
           if (edge.exceptionType != null) code.append("__CosdgRuntime.hit(\"EXCEPTION_TYPE\",\"")
               .append(node.id).append("=").append(edge.exceptionType).append("\");");
         } else if (throwsEdges.size() > 1) unsupported.add("Runtime exception target resolution unsupported for " + node.id);
+        else if (node.exceptionTypes.size() == 1) code.append("__CosdgRuntime.hit(\"EXCEPTION_TYPE\",\"")
+            .append(node.id).append("=").append(node.exceptionTypes.iterator().next()).append("\");");
       }
       if ("EXCEPTION_CATCH".equals(event)) {
         Edge caught = uniqueIncoming(node, "EXCEPTION_CATCH");
@@ -171,10 +186,34 @@ public final class SourceInstrumenter {
       return code.toString();
     }
 
+    private void rewriteLoopPredicate(JavaParser.ExpressionContext expression, Node node) {
+      Edge incoming = incomingControl(node);
+      Edge yes = branch(node, "true");
+      Edge no = branch(node, "false");
+      Edge repeat = graph.getAllEdges().stream().filter(e -> e.from == node && e.to == node
+          && "CONTROL_DEPENDENCE".equals(e.type) && "loop".equals(e.branch)).findFirst().orElse(null);
+      String original = out.getTokenStream().getText(expression.getSourceInterval());
+      String replacement = "__CosdgRuntime.loop(\"" + node.id + "\",(" + original + "),\""
+          + label(incoming) + "\",\"" + label(yes) + "\",\"" + label(no) + "\",\""
+          + label(repeat) + "\")";
+      out.replace(expression.start, expression.stop, replacement);
+      if (no == null) unsupported.add("Graph has no false/exit control edge for loop predicate " + node.id);
+      if (repeat == null) unsupported.add("Graph has no repeat control edge for loop predicate " + node.id);
+    }
+
+    /** Registers graph-backed calls in Java evaluation order, including calls nested
+     * inside another invocation such as println(service.run()). */
+    private String callProbes(ParseTree context){StringBuilder code=new StringBuilder();List<Node> ordered=new ArrayList<>();collectCalls(context,ordered);
+      for(Node call:ordered)if(outgoingCallCount(call)>0)code.append(probe(call,"NODE_HIT")).append("__CosdgRuntime.call(\"").append(call.id).append("\");");return code.toString();}
+    private void collectCalls(ParseTree tree,List<Node> ordered){for(int i=0;i<tree.getChildCount();i++)collectCalls(tree.getChild(i),ordered);if(tree instanceof JavaParser.MethodCallContext){Node call=nodes.get(tree);if(call!=null)ordered.add(call);}}
+
     private Edge uniqueIncoming(Node node, String type) {
       List<Edge> found = graph.getAllEdges().stream().filter(e -> e.to == node && type.equals(e.type)).toList();
       return found.size() == 1 ? found.get(0) : null;
     }
+    private Edge incomingControl(Node node) { return graph.getAllEdges().stream()
+        .filter(e -> e.to == node && e.from != node && "CONTROL_DEPENDENCE".equals(e.type))
+        .findFirst().orElse(null); }
     private int outgoingCallCount(Node node) { return (int) graph.getAllEdges().stream().filter(e -> e.from == node && e.type.endsWith("METHOD_CALL")).count(); }
     private List<Edge> outgoing(Node node, String type) { return graph.getAllEdges().stream().filter(e -> e.from == node && type.equals(e.type)).toList(); }
     private Edge branch(Node node, String branch) { return graph.getAllEdges().stream().filter(e -> e.from == node && "CONTROL_DEPENDENCE".equals(e.type) && branch.equals(e.branch)).findFirst().orElse(null); }
@@ -203,6 +242,7 @@ public final class SourceInstrumenter {
         final class __CosdgRuntime {
           private static final Set<String> EVENTS = new LinkedHashSet<>();
           private static final Map<String,String> TARGETS = new HashMap<>();
+          private static final Set<String> ACTIVE_LOOPS = new LinkedHashSet<>();
           private static final ThreadLocal<ArrayDeque<String>> CALLS = ThreadLocal.withInitial(ArrayDeque::new);
           static { %s Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             String payload;
@@ -215,7 +255,7 @@ public final class SourceInstrumenter {
             hit("METHOD_ENTER", method);
             ArrayDeque<String> calls = CALLS.get();
             if (calls.isEmpty()) return;
-            String call = calls.removeLast();
+            String call = calls.removeFirst();
             String target = TARGETS.get(call + "|" + method);
             if (target == null) return;
             String[] parts = target.split("\\\\|", -1);
@@ -226,6 +266,14 @@ public final class SourceInstrumenter {
             hit("NODE_HIT", node); hit("EDGE_HIT", incoming);
             String edge = value ? yes : no;
             hit(kind, edge); hit("EDGE_HIT", edge);
+            return value;
+          }
+          static synchronized boolean loop(String node, boolean value, String incoming, String yes, String no, String repeat) {
+            hit("NODE_HIT", node);
+            if (ACTIVE_LOOPS.add(node)) hit("EDGE_HIT", incoming); else hit("EDGE_HIT", repeat);
+            String edge = value ? yes : no;
+            hit("LOOP", edge); hit("EDGE_HIT", edge);
+            if (!value) ACTIVE_LOOPS.remove(node);
             return value;
           }
         }

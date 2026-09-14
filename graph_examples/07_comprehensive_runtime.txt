@@ -1,0 +1,58 @@
+interface ScoreProcessor {
+    int process(int value);
+}
+
+class PositiveProcessor implements ScoreProcessor {
+    public int process(int value) {
+        return value + 10;
+    }
+}
+
+class NegativeProcessor implements ScoreProcessor {
+    public int process(int value) {
+        return value - 10;
+    }
+}
+
+class ComprehensiveRuntimeExample {
+    static int evaluate(int mode, int value, int divisor) {
+        ScoreProcessor processor;
+
+        if (mode > 0) {
+            processor = new PositiveProcessor();
+        } else {
+            processor = new NegativeProcessor();
+        }
+
+        int processed = processor.process(value);
+        int total = 0;
+
+        for (int index = 0; index < 2; index++) {
+            if (processed > index) {
+                total = total + processed;
+            } else {
+                total = total - 1;
+            }
+        }
+
+        try {
+            if (divisor == 0) {
+                throw new ArithmeticException("zero divisor");
+            }
+
+            int result = total / divisor;
+            if (result < 0) {
+                throw new IllegalArgumentException("negative result");
+            }
+            return result;
+        } catch (ArithmeticException exception) {
+            return -100;
+        } catch (IllegalArgumentException exception) {
+            return -200;
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println(evaluate(1, 5, 2));
+    }
+}

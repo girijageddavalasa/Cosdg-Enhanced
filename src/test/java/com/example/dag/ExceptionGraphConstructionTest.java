@@ -110,4 +110,24 @@ public class ExceptionGraphConstructionTest extends TestCase {
     assertTrue(edge.from.type.contains("THROW_STMT"));
     assertSame(catchFor(b, "Exception"), edge.to);
   }
+
+  public void testLiteralTextDoesNotCreateFalseDataDependenceAndCatchLineIsAccurate() {
+    DAGBuilder b = build("""
+        class A {
+          int validate(int value) {
+            try {
+              if (value < 0) throw new IllegalArgumentException("negative value");
+              return value;
+            } catch (IllegalArgumentException exception) {
+              return -1;
+            }
+          }
+        }
+        """);
+    Node throwNode = nodes(b, "THROW_STMT").get(0);
+    Node formalIn = nodes(b, "FORMAL_IN").get(0);
+    assertFalse(edges(b, "DATA_DEPENDENCE").stream()
+        .anyMatch(e -> e.from == formalIn && e.to == throwNode));
+    assertEquals(6, catchFor(b, "IllegalArgumentException").sourceLine);
+  }
 }

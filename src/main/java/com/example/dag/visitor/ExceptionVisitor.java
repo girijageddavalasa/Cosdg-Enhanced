@@ -34,21 +34,25 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
   private record TryRegion(Node node, List<CatchInfo> catches) {}
   private record ThrowOrigin(Node node, String type) {}
   private record ThrowRecord(MethodInfo method, ThrowOrigin origin, List<TryRegion> handlers) {}
-  private record CallRecord(MethodInfo caller, List<MethodInfo> targets, List<TryRegion> handlers) {}
+  private record CallRecord(MethodInfo caller, List<MethodInfo> targets, List<TryRegion> handlers,
+                            List<Node> actualIns, Node actualOut) {}
 
   private static final class ClassInfo {
     final String name;
     final String parentName;
+    final List<String> directParents;
+    final boolean interfaceType;
     final Node entry;
-    final JavaParser.ClassDeclarationContext context;
     final String sourceFile;
     final Map<String, List<MethodInfo>> methods = new LinkedHashMap<>();
 
-    ClassInfo(String name, String parentName, Node entry, JavaParser.ClassDeclarationContext context, String sourceFile) {
+    ClassInfo(String name, String parentName, List<String> directParents, boolean interfaceType,
+              Node entry, String sourceFile) {
       this.name = name;
       this.parentName = parentName;
+      this.directParents = List.copyOf(directParents);
+      this.interfaceType = interfaceType;
       this.entry = entry;
-      this.context = context;
       this.sourceFile = sourceFile;
     }
   }
@@ -85,13 +89,18 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
   private final Map<String, ClassInfo> classes = new LinkedHashMap<>();
   private final Deque<ControlContext> controls = new ArrayDeque<>();
   private final Deque<TryRegion> activeTryRegions = new ArrayDeque<>();
-  private final Map<String, Node> lastDefinitions = new HashMap<>();
+  /** Reaching definitions are sets because branches and loop exits may merge. */
+  private final Map<String, Set<Node>> lastDefinitions = new HashMap<>();
   private final Map<String, String> variableTypes = new HashMap<>();
   private final Map<String, Set<String>> variableRuntimeTypes = new HashMap<>();
+  private final Map<String, Set<Integer>> variableParameterDependencies = new HashMap<>();
   private final List<CallRecord> callRecords = new ArrayList<>();
   private final List<ThrowRecord> throwRecords = new ArrayList<>();
   private final Set<String> exceptionEdgeKeys = new HashSet<>();
+  private final Set<String> dataEdgeKeys = new HashSet<>();
+  private final List<Node> pendingLoopExits = new ArrayList<>();
   private final Map<ParseTree, Node> instrumentationNodes = new IdentityHashMap<>();
+  private final Map<JavaParser.MethodCallContext, Node> callActualOutputs = new IdentityHashMap<>();
 
   private static final Map<String, String> BUILTIN_EXCEPTION_PARENTS = Map.ofEntries(
       Map.entry("Throwable", "Object"),
@@ -140,6 +149,7 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
       builder.setSourceFile(sourceFiles.get(i));
       for (JavaParser.TypeDeclarationContext declaration : units.get(i).typeDeclaration()) {
         if (declaration.classDeclaration() != null) registerClass(declaration.classDeclaration(), sourceFiles.get(i));
+        else if (declaration.interfaceDeclaration() != null) registerInterface(declaration.interfaceDeclaration(), sourceFiles.get(i));
       }
     }
     buildInheritanceHierarchy();
@@ -149,6 +159,7 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
         for (MethodInfo method : overloads) buildMethodBody(method);
       }
     }
+    resolveSummaryEdges();
     resolveExceptionalFlows();
     currentClass = null;
     currentMethod = null;
@@ -158,10 +169,15 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
   private void registerClass(JavaParser.ClassDeclarationContext ctx, String sourceFile) {
     String name = ctx.identifier().getText();
     String parentName = ctx.typeType() == null ? null : simpleType(ctx.typeType().getText());
+    List<String> parents = new ArrayList<>();
+    if (parentName != null) parents.add(parentName);
+    if (ctx.IMPLEMENTS()!=null&&!ctx.typeList().isEmpty()) for (JavaParser.TypeTypeContext type : ctx.typeList(0).typeType()) {
+      String implemented=simpleType(type.getText());if(!parents.contains(implemented))parents.add(implemented);
+    }
     builder.setOwnershipContext(name, null);
     builder.setCurrentSourceLine(ctx.start.getLine());
-    ClassInfo info = new ClassInfo(name, parentName,
-        builder.createNode("CLASS_ENTRY", name), ctx, sourceFile);
+    ClassInfo info = new ClassInfo(name, parentName, parents, false,
+        builder.createNode("CLASS_ENTRY", name), sourceFile);
     bind(ctx, info.entry);
     if (startNode == null) startNode = info.entry;
     classes.put(name, info);
@@ -180,6 +196,29 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
         registerConstructor(info, member.genericConstructorDeclaration().constructorDeclaration(), visible);
       }
     }
+  }
+
+  private void registerInterface(JavaParser.InterfaceDeclarationContext ctx,String sourceFile){
+    String name=ctx.identifier().getText();List<String> parents=new ArrayList<>();
+    if(ctx.EXTENDS()!=null&&!ctx.typeList().isEmpty())for(JavaParser.TypeTypeContext type:ctx.typeList(0).typeType())parents.add(simpleType(type.getText()));
+    builder.setOwnershipContext(name,null);builder.setCurrentSourceLine(ctx.start.getLine());
+    ClassInfo info=new ClassInfo(name,parents.isEmpty()?null:parents.get(0),parents,true,
+        builder.createNode("CLASS_ENTRY",name),sourceFile);bind(ctx,info.entry);if(startNode==null)startNode=info.entry;classes.put(name,info);
+    for(JavaParser.InterfaceBodyDeclarationContext declaration:ctx.interfaceBody().interfaceBodyDeclaration()){
+      if(declaration.interfaceMemberDeclaration()==null)continue;
+      JavaParser.InterfaceMemberDeclarationContext member=declaration.interfaceMemberDeclaration();
+      if(member.interfaceMethodDeclaration()!=null)registerInterfaceMethod(info,member.interfaceMethodDeclaration().interfaceCommonBodyDeclaration());
+      else if(member.genericInterfaceMethodDeclaration()!=null)registerInterfaceMethod(info,member.genericInterfaceMethodDeclaration().interfaceCommonBodyDeclaration());
+    }
+  }
+
+  private void registerInterfaceMethod(ClassInfo owner,JavaParser.InterfaceCommonBodyDeclarationContext ctx){
+    String name=ctx.identifier().getText(),returnType=ctx.typeTypeOrVoid().getText();
+    ParseTree body=ctx.methodBody()==null?null:ctx.methodBody().block();
+    builder.setOwnershipContext(owner.name,name);builder.setCurrentSourceLine(ctx.start.getLine());
+    MethodInfo method=new MethodInfo(name,returnType,builder.createNode("METHOD_ENTRY",owner.name+"."+name),owner,body,true);
+    bind(ctx,method.entry);registerParameters(method,ctx.formalParameters());
+    finishMethodRegistration(method, body != null);
   }
 
   private void registerMethod(ClassInfo owner, JavaParser.MethodDeclarationContext ctx, boolean visible) {
@@ -207,7 +246,12 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
   }
 
   private void finishMethodRegistration(MethodInfo method) {
-    builder.connect(method.owner.entry, method.entry, "class_member");
+    finishMethodRegistration(method, true);
+  }
+
+  private void finishMethodRegistration(MethodInfo method, boolean executable) {
+    builder.connect(method.owner.entry, method.entry,
+        executable ? "class_member" : "abstract_class_member");
     if (!"void".equals(method.returnType)) {
       method.formalOut = builder.createNode("FORMAL_OUT", method.name + ".return");
       builder.connect(method.entry, method.formalOut, "control");
@@ -234,7 +278,7 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
 
   private void identifyReturnDependencies(MethodInfo method) {
     if (method.body == null || method.formalOut == null) return;
-    String bodyText = method.body.getText();
+    String bodyText = stripLiterals(method.body.getText());
     for (int i = 0; i < method.parameters.size(); i++) {
       String name = method.parameters.get(i).name();
       if (Pattern.compile("return[^;]*\\b" + Pattern.quote(name) + "\\b").matcher(bodyText).find()
@@ -246,27 +290,26 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
 
   private void buildInheritanceHierarchy() {
     for (ClassInfo child : classes.values()) {
-      ClassInfo parent = classes.get(child.parentName);
-      if (parent == null) continue;
       Set<String> overridden = new HashSet<>();
       for (List<MethodInfo> methods : child.methods.values()) {
         for (MethodInfo method : methods) overridden.add(method.signature());
       }
-      List<String> visible = new ArrayList<>();
-      collectVisibleMethods(parent, overridden, visible);
-      builder.connectInheritance(child.entry, parent.entry, visible);
+      for(String parentName:child.directParents){ClassInfo parent=classes.get(parentName);if(parent==null)continue;
+        List<String> visible=new ArrayList<>();collectVisibleMethods(parent,overridden,visible,new HashSet<>());
+        builder.connectInheritance(child.entry,parent.entry,visible);
+      }
     }
   }
 
-  private void collectVisibleMethods(ClassInfo owner, Set<String> overridden, List<String> result) {
+  private void collectVisibleMethods(ClassInfo owner, Set<String> overridden, List<String> result,Set<String> visited) {
+    if(owner==null||!visited.add(owner.name))return;
     for (List<MethodInfo> methods : owner.methods.values()) {
       for (MethodInfo method : methods) {
         if (method.visibleToChildren && !method.name.equals(owner.name)
             && !overridden.contains(method.signature())) result.add(method.signature());
       }
     }
-    ClassInfo parent = classes.get(owner.parentName);
-    if (parent != null) collectVisibleMethods(parent, overridden, result);
+    for(String parentName:owner.directParents)collectVisibleMethods(classes.get(parentName),overridden,result,visited);
   }
 
   private void buildMethodBody(MethodInfo method) {
@@ -274,17 +317,22 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     currentMethod = method;
     builder.setOwnershipContext(method.owner.name, method.name);
     controls.clear();
+    pendingLoopExits.clear();
     controls.push(new ControlContext(method.entry, null));
     lastDefinitions.clear();
     variableTypes.clear();
     variableRuntimeTypes.clear();
+    variableParameterDependencies.clear();
     activeTryRegions.clear();
-    for (ParameterInfo parameter : method.parameters) {
-      lastDefinitions.put(parameter.name(), parameter.formalIn());
+    for (int i = 0; i < method.parameters.size(); i++) {
+      ParameterInfo parameter = method.parameters.get(i);
+      setDefinition(parameter.name(), parameter.formalIn());
       variableTypes.put(parameter.name(), parameter.type());
+      variableParameterDependencies.put(parameter.name(), new LinkedHashSet<>(Set.of(i)));
     }
     if (method.body != null) visit(method.body);
     controls.clear();
+    pendingLoopExits.clear();
     lastDefinitions.clear();
     variableTypes.clear();
     variableRuntimeTypes.clear();
@@ -301,6 +349,12 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     if (!controls.isEmpty()) {
       ControlContext control = controls.peek();
       builder.connect(control.controller(), node, "control", control.branch());
+    }
+    if (!pendingLoopExits.isEmpty()) {
+      for (Node predicate : pendingLoopExits) {
+        builder.connect(predicate, node, "control", "false");
+      }
+      pendingLoopExits.clear();
     }
     return node;
   }
@@ -320,32 +374,49 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
       Node predicate = createControlledNode("IF_PREDICATE");
       bind(ctx, predicate);
       addUses(predicate, ctx.expression(0).getText());
+      Map<String, Set<Node>> before = copyDefinitions();
       visitControlled(ctx.statement(0), predicate, "true");
+      Map<String, Set<Node>> trueDefinitions = copyDefinitions();
+      restoreDefinitions(before);
       if (ctx.statement().size() > 1) visitControlled(ctx.statement(1), predicate, "false");
+      Map<String, Set<Node>> falseDefinitions = copyDefinitions();
+      restoreDefinitions(mergeDefinitions(trueDefinitions, falseDefinitions));
       return predicate;
     }
     if (ctx.WHILE() != null && ctx.DO() == null) {
       Node predicate = createControlledNode("LOOP_PREDICATE");
       bind(ctx, predicate);
       addUses(predicate, ctx.expression(0).getText());
+      Map<String, Set<Node>> before = copyDefinitions();
       visitControlled(ctx.statement(0), predicate, "true");
+      restoreDefinitions(mergeDefinitions(before, copyDefinitions()));
+      addUses(predicate, ctx.expression(0).getText());
       builder.connect(predicate, predicate, "control", "loop");
+      pendingLoopExits.add(predicate);
       return predicate;
     }
     if (ctx.FOR() != null) {
       Node predicate = createControlledNode("LOOP_PREDICATE");
       bind(ctx, predicate);
       if (ctx.forControl() != null) addUses(predicate, ctx.forControl().getText());
+      Map<String, Set<Node>> before = copyDefinitions();
       visitControlled(ctx.statement(0), predicate, "true");
+      restoreDefinitions(mergeDefinitions(before, copyDefinitions()));
+      if (ctx.forControl() != null) addUses(predicate, ctx.forControl().getText());
       builder.connect(predicate, predicate, "control", "loop");
+      pendingLoopExits.add(predicate);
       return predicate;
     }
     if (ctx.DO() != null) {
       Node predicate = createControlledNode("LOOP_PREDICATE");
       bind(ctx, predicate);
       if (!ctx.expression().isEmpty()) addUses(predicate, ctx.expression(0).getText());
+      Map<String, Set<Node>> before = copyDefinitions();
       visitControlled(ctx.statement(0), predicate, "true");
+      restoreDefinitions(mergeDefinitions(before, copyDefinitions()));
+      if (!ctx.expression().isEmpty()) addUses(predicate, ctx.expression(0).getText());
       builder.connect(predicate, predicate, "control", "loop");
+      pendingLoopExits.add(predicate);
       return predicate;
     }
     if (ctx.block() != null && ctx.TRY() == null) return visit(ctx.block());
@@ -356,6 +427,7 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
       List<CatchInfo> catches = new ArrayList<>();
       for (JavaParser.CatchClauseContext catchCtx : ctx.catchClause()) {
         List<String> types = splitCatchTypes(catchCtx.catchType().getText());
+        builder.setCurrentSourceLine(catchCtx.start.getLine());
         Node catchNode = builder.createCatchNode("CATCH_START", String.join("|", types));
         bind(catchCtx, catchNode);
         catchNode.exceptionTypes.addAll(types);
@@ -392,15 +464,20 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
       return tryNode;
     }
 
-    JavaParser.MethodCallContext call = findFirstCall(ctx);
-    Node statement = call == null
+    List<JavaParser.MethodCallContext> calls = findCallsPostOrder(ctx);
+    Node statement = calls.isEmpty()
         ? createControlledNode(ctx.THROW() != null ? "THROW_STMT" : "STMT")
-        : createCall(call, isValueUsed(ctx.getText()));
+        : createCalls(calls, isValueUsed(ctx.getText()));
     bind(ctx, statement);
-    processAssignment(statement, ctx.getText());
+    if (calls.isEmpty()) processAssignment(statement, ctx.getText());
+    else processCallAssignment(statement, calls, ctx.getText());
     if (ctx.THROW() != null) recordThrow(statement, ctx.expression(0).getText());
     if (ctx.RETURN() != null && currentMethod.formalOut != null) {
-      builder.connect(statement, currentMethod.formalOut, "data");
+      Node returnedValue = calls.isEmpty()
+          ? statement : definitionNodeForInitializer(calls, statement);
+      if (calls.isEmpty()) addUses(statement, ctx.expression(0).getText());
+      currentMethod.returnParameterDependencies.addAll(parameterDependencies(ctx.expression(0).getText()));
+      builder.connect(returnedValue, currentMethod.formalOut, "data");
     }
     return statement;
   }
@@ -410,32 +487,48 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     builder.setCurrentSourceLine(ctx.start.getLine());
     if (ctx.localVariableDeclaration() != null) {
       JavaParser.LocalVariableDeclarationContext declaration = ctx.localVariableDeclaration();
-      JavaParser.MethodCallContext call = findFirstCall(declaration);
-      Node statement = call == null
-          ? createControlledNode("VAR_DECL") : createCall(call, true);
+      List<JavaParser.MethodCallContext> calls = findCallsPostOrder(declaration);
+      Node statement = calls.isEmpty()
+          ? createControlledNode("VAR_DECL") : createCalls(calls, true);
       bind(ctx, statement);
       if (declaration.VAR() != null) {
         String name = declaration.identifier().getText();
         String initializer = declaration.expression().getText();
-        addUses(statement, initializer);
-        lastDefinitions.put(name, statement);
+        if (calls.isEmpty()) addUses(statement, initializer);
+        setDefinition(name, definitionNodeForInitializer(calls, statement));
         variableTypes.put(name, inferredType(initializer));
+        variableParameterDependencies.put(name, parameterDependencies(initializer));
         addRuntimeType(name, initializer);
         return statement;
       }
       for (JavaParser.VariableDeclaratorContext variable : declaration.variableDeclarators().variableDeclarator()) {
-        if (variable.variableInitializer() != null) addUses(statement, variable.variableInitializer().getText());
+        if (calls.isEmpty() && variable.variableInitializer() != null) {
+          addUses(statement, variable.variableInitializer().getText());
+        }
         String name = variable.variableDeclaratorId().getText();
-        lastDefinitions.put(name, statement);
+        setDefinition(name, variable.variableInitializer() == null
+            ? statement : definitionNodeForInitializer(calls, statement));
         variableTypes.put(name, simpleType(declaration.typeType().getText()));
         if (variable.variableInitializer() != null) {
+          variableParameterDependencies.put(name,
+              parameterDependencies(variable.variableInitializer().getText()));
           addRuntimeType(name, variable.variableInitializer().getText());
+        } else {
+          variableParameterDependencies.remove(name);
         }
       }
       return statement;
     }
     if (ctx.statement() != null) return visit(ctx.statement());
     return null;
+  }
+
+  /** A call result is represented by its actual-out vertex, which is the reaching
+   * definition for a variable initialized from that call. */
+  private Node definitionNodeForInitializer(List<JavaParser.MethodCallContext> calls, Node fallback) {
+    if (calls.isEmpty()) return fallback;
+    Node actualOut = callActualOutputs.get(calls.get(calls.size() - 1));
+    return actualOut == null ? fallback : actualOut;
   }
 
   private String inferredType(String expression) {
@@ -458,23 +551,33 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     for (int i = 0; i < arguments.size(); i++) {
       Node actualIn = builder.createNode("ACTUAL_IN", methodName + ".arg" + i);
       builder.connect(callNode, actualIn, "control");
-      addUses(actualIn, arguments.get(i).getText());
+      List<JavaParser.MethodCallContext> nestedCalls = findCallsPostOrder(arguments.get(i));
+      String residualArgument = arguments.get(i).getText();
+      for (JavaParser.MethodCallContext nested : nestedCalls) {
+        residualArgument = residualArgument.replace(nested.getText(), " ");
+        Node nestedOutput = callActualOutputs.get(nested);
+        if (nestedOutput != null) builder.connect(nestedOutput, actualIn, "data");
+      }
+      addUses(actualIn, residualArgument);
       actualIns.add(actualIn);
     }
 
     String receiver = receiverText(call);
+    if (receiver != null && !"this".equals(receiver) && !"super".equals(receiver)) {
+      addUses(callNode, receiver);
+    }
     String receiverType = receiver == null || "this".equals(receiver)
         ? currentClass.name : "super".equals(receiver)
         ? currentClass.parentName : variableTypes.getOrDefault(receiver, simpleType(receiver));
 
     List<MethodInfo> targets = resolveTargets(receiverType, methodName, arguments.size(), receiver);
-    callRecords.add(new CallRecord(currentMethod, new ArrayList<>(targets),
-        new ArrayList<>(activeTryRegions)));
     boolean polymorphic = isPolymorphic(receiverType, methodName, arguments.size(), receiver);
     Node actualOut = valueUsed && targets.stream().anyMatch(target -> target.formalOut != null)
         ? builder.createNode("ACTUAL_OUT", methodName + ".return") : null;
     if (actualOut != null) builder.connect(callNode, actualOut, "control");
-    Set<Integer> summarizedInputs = new HashSet<>();
+    if (actualOut != null) callActualOutputs.put(call, actualOut);
+    callRecords.add(new CallRecord(currentMethod, new ArrayList<>(targets),
+        new ArrayList<>(activeTryRegions), new ArrayList<>(actualIns), actualOut));
     for (MethodInfo target : targets) {
       String relationship = polymorphic ? "polymorphic_call"
           : target.owner.name.equals(receiverType) || receiver == null || "this".equals(receiver)
@@ -490,14 +593,17 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
       }
       if (actualOut != null && target.formalOut != null) {
         builder.connect(target.formalOut, actualOut, "parameter_out");
-        for (Integer index : target.returnParameterDependencies) {
-          if (index < actualIns.size() && summarizedInputs.add(index)) {
-            builder.connect(actualIns.get(index), actualOut, "summary");
-          }
-        }
       }
     }
     return callNode;
+  }
+
+  private Node createCalls(List<JavaParser.MethodCallContext> calls, boolean outerValueUsed) {
+    Node outer = null;
+    for (int i = 0; i < calls.size(); i++) {
+      outer = createCall(calls.get(i), i < calls.size() - 1 || outerValueUsed);
+    }
+    return outer;
   }
 
   private List<MethodInfo> resolveTargets(String receiverType, String name, int arity, String receiver) {
@@ -532,22 +638,22 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
   }
 
   private boolean isDescendant(ClassInfo candidate, String ancestorName) {
-    String parent = candidate.parentName;
-    while (parent != null) {
-      if (parent.equals(ancestorName)) return true;
-      ClassInfo parentInfo = classes.get(parent);
-      parent = parentInfo == null ? null : parentInfo.parentName;
-    }
+    return isDescendant(candidate,ancestorName,new HashSet<>());
+  }
+
+  private boolean isDescendant(ClassInfo candidate,String ancestorName,Set<String> visited){
+    if(candidate==null||!visited.add(candidate.name))return false;
+    for(String parent:candidate.directParents){if(parent.equals(ancestorName)||isDescendant(classes.get(parent),ancestorName,visited))return true;}
     return false;
   }
 
   private MethodInfo lookupMethod(ClassInfo owner, String name, int arity) {
-    ClassInfo current = owner;
-    while (current != null) {
-      MethodInfo local = localMethod(current, name, arity);
-      if (local != null) return local;
-      current = classes.get(current.parentName);
-    }
+    return lookupMethod(owner,name,arity,new HashSet<>());
+  }
+
+  private MethodInfo lookupMethod(ClassInfo owner,String name,int arity,Set<String> visited){
+    if(owner==null||!visited.add(owner.name))return null;MethodInfo local=localMethod(owner,name,arity);if(local!=null)return local;
+    for(String parent:owner.directParents){MethodInfo inherited=lookupMethod(classes.get(parent),name,arity,visited);if(inherited!=null)return inherited;}
     return null;
   }
 
@@ -568,13 +674,15 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     return null;
   }
 
-  private JavaParser.MethodCallContext findFirstCall(ParseTree tree) {
-    if (tree instanceof JavaParser.MethodCallContext call) return call;
-    for (int i = 0; i < tree.getChildCount(); i++) {
-      JavaParser.MethodCallContext found = findFirstCall(tree.getChild(i));
-      if (found != null) return found;
-    }
-    return null;
+  private List<JavaParser.MethodCallContext> findCallsPostOrder(ParseTree tree) {
+    List<JavaParser.MethodCallContext> calls = new ArrayList<>();
+    collectCallsPostOrder(tree, calls);
+    return calls;
+  }
+
+  private void collectCallsPostOrder(ParseTree tree, List<JavaParser.MethodCallContext> calls) {
+    for (int i = 0; i < tree.getChildCount(); i++) collectCallsPostOrder(tree.getChild(i), calls);
+    if (tree instanceof JavaParser.MethodCallContext call) calls.add(call);
   }
 
   private boolean isValueUsed(String text) {
@@ -585,6 +693,15 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     int assignment = assignmentIndex(text);
     if (assignment < 0) {
       addUses(statement, text);
+      Matcher update = Pattern.compile("(?:\\+\\+|--)([A-Za-z_$][A-Za-z0-9_$]*)|([A-Za-z_$][A-Za-z0-9_$]*)(?:\\+\\+|--)")
+          .matcher(text);
+      if (update.find()) {
+        String defined = update.group(1) != null ? update.group(1) : update.group(2);
+        Set<Integer> dependencies = new LinkedHashSet<>(
+            variableParameterDependencies.getOrDefault(defined, Set.of()));
+        setDefinition(defined, statement);
+        variableParameterDependencies.put(defined, dependencies);
+      }
       return;
     }
     String left = text.substring(0, assignment);
@@ -593,9 +710,71 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
     String defined = null;
     while (matcher.find()) defined = matcher.group();
     if (defined != null && !NON_VARIABLE_WORDS.contains(defined)) {
-      lastDefinitions.put(defined, statement);
+      setDefinition(defined, statement);
+      variableParameterDependencies.put(defined,
+          parameterDependencies(text.substring(assignment + 1)));
       addRuntimeType(defined, text.substring(assignment + 1));
     }
+  }
+
+  /** Calls own their argument uses through ACTUAL_IN nodes. This method records
+   * only the value defined by an assignment whose right-hand side contains a call. */
+  private void processCallAssignment(Node callNode, List<JavaParser.MethodCallContext> calls, String text) {
+    int assignment = assignmentIndex(text);
+    if (assignment < 0) return;
+    Matcher matcher = IDENTIFIER.matcher(text.substring(0, assignment));
+    String defined = null;
+    while (matcher.find()) defined = matcher.group();
+    if (defined == null || NON_VARIABLE_WORDS.contains(defined)) return;
+    setDefinition(defined, definitionNodeForInitializer(calls, callNode));
+    String expression = text.substring(assignment + 1);
+    variableParameterDependencies.put(defined, parameterDependencies(expression));
+    addRuntimeType(defined, expression);
+  }
+
+  private Set<Integer> parameterDependencies(String expression) {
+    Set<Integer> dependencies = new LinkedHashSet<>();
+    Matcher matcher = IDENTIFIER.matcher(stripLiterals(expression));
+    while (matcher.find()) {
+      Set<Integer> variableDependencies = variableParameterDependencies.get(matcher.group());
+      if (variableDependencies != null) dependencies.addAll(variableDependencies);
+    }
+    return dependencies;
+  }
+
+  private void resolveSummaryEdges() {
+    Set<String> connected = new HashSet<>();
+    for (CallRecord call : callRecords) {
+      if (call.actualOut() == null) continue;
+      for (MethodInfo target : call.targets()) {
+        for (int index = 0; index < target.parameters.size(); index++) {
+          if (!target.returnParameterDependencies.contains(index)
+              && !hasDependencePath(target.parameters.get(index).formalIn(), target.formalOut, target)) continue;
+          if (index >= call.actualIns().size()) continue;
+          String key = call.actualIns().get(index).id + "->" + call.actualOut().id;
+          if (connected.add(key)) builder.connect(call.actualIns().get(index), call.actualOut(), "summary");
+        }
+      }
+    }
+  }
+
+  private boolean hasDependencePath(Node start, Node destination, MethodInfo method) {
+    if (start == null || destination == null) return false;
+    Deque<Node> work = new ArrayDeque<>();
+    Set<Node> visited = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+    work.add(start);
+    visited.add(start);
+    while (!work.isEmpty()) {
+      Node current = work.removeFirst();
+      for (com.example.dag.graph.Edge edge : current.edges) {
+        if (!"DATA_DEPENDENCE".equals(edge.type) && !"CONTROL_DEPENDENCE".equals(edge.type)) continue;
+        Node next = edge.to;
+        if (next == destination) return true;
+        if (!method.owner.name.equals(next.classId) || !method.name.equals(next.methodId)) continue;
+        if (visited.add(next)) work.addLast(next);
+      }
+    }
+    return false;
   }
 
   private void addRuntimeType(String variable, String expression) {
@@ -618,13 +797,77 @@ public class ExceptionVisitor extends JavaParserBaseVisitor<Node> {
 
   private void addUses(Node useNode, String expression) {
     Set<String> connected = new HashSet<>();
-    Matcher matcher = IDENTIFIER.matcher(expression);
+    Matcher matcher = IDENTIFIER.matcher(stripLiterals(expression));
     while (matcher.find()) {
-      Node definition = lastDefinitions.get(matcher.group());
-      if (definition != null && definition != useNode && connected.add(definition.id)) {
-        builder.connect(definition, useNode, "data");
+      for (Node definition : lastDefinitions.getOrDefault(matcher.group(), Set.of())) {
+        String key = definition.id + "->" + useNode.id;
+        if (definition != useNode && connected.add(definition.id) && dataEdgeKeys.add(key)) {
+          builder.connect(definition, useNode, "data");
+        }
       }
     }
+  }
+
+  /** Replaces Java string, character, and text-block contents before lexical
+   * identifier matching so words inside literals cannot become variable uses. */
+  private String stripLiterals(String text) {
+    StringBuilder result = new StringBuilder(text.length());
+    boolean quoted = false;
+    boolean character = false;
+    boolean escaped = false;
+    for (int i = 0; i < text.length(); i++) {
+      char current = text.charAt(i);
+      if (quoted || character) {
+        result.append(' ');
+        if (escaped) {
+          escaped = false;
+        } else if (current == '\\') {
+          escaped = true;
+        } else if ((quoted && current == '"') || (character && current == '\'')) {
+          quoted = false;
+          character = false;
+        }
+      } else if (current == '"') {
+        quoted = true;
+        result.append(' ');
+      } else if (current == '\'') {
+        character = true;
+        result.append(' ');
+      } else {
+        result.append(current);
+      }
+    }
+    return result.toString();
+  }
+
+  private void setDefinition(String variable, Node definition) {
+    lastDefinitions.put(variable, new LinkedHashSet<>(Set.of(definition)));
+  }
+
+  private Map<String, Set<Node>> copyDefinitions() {
+    Map<String, Set<Node>> copy = new HashMap<>();
+    for (Map.Entry<String, Set<Node>> entry : lastDefinitions.entrySet()) {
+      copy.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+    }
+    return copy;
+  }
+
+  private void restoreDefinitions(Map<String, Set<Node>> definitions) {
+    lastDefinitions.clear();
+    for (Map.Entry<String, Set<Node>> entry : definitions.entrySet()) {
+      lastDefinitions.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+    }
+  }
+
+  @SafeVarargs
+  private final Map<String, Set<Node>> mergeDefinitions(Map<String, Set<Node>>... states) {
+    Map<String, Set<Node>> merged = new HashMap<>();
+    for (Map<String, Set<Node>> state : states) {
+      for (Map.Entry<String, Set<Node>> entry : state.entrySet()) {
+        merged.computeIfAbsent(entry.getKey(), ignored -> new LinkedHashSet<>()).addAll(entry.getValue());
+      }
+    }
+    return merged;
   }
 
   private void recordThrow(Node throwNode, String expression) {
